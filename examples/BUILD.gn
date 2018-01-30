@@ -16,6 +16,44 @@ if (is_android) {
   import("//build/config/ios/rules.gni")
 }
 
+rtc_executable("mergeworker") {
+  sources = [
+    "mergeworker/signaling.cpp",
+    "mergeworker/signaling.hpp",
+    "mergeworker/media.cpp",
+    "mergeworker/media.hpp",
+    "mergeworker/packet.cpp",
+    "mergeworker/packet.hpp",
+    "mergeworker/util.hpp",
+    "mergeworker/muxer.cpp",
+    "mergeworker/muxer.hpp",
+    "mergeworker/input.cpp",
+    "mergeworker/input.hpp",
+    "mergeworker/output.cpp",
+    "mergeworker/output.hpp",
+    "mergeworker/base64.cpp",
+    "mergeworker/base64.h",
+    "mergeworker/jwt.hpp",
+    "mergeworker/jwt.cpp",
+    "mergeworker/main.cpp",
+  ]
+  cflags = [ ]
+  defines = [ ]
+  deps = [
+    "//third_party/uWebSockets:uwebsocket",
+    "../rtc_base:rtc_base",
+    "../rtc_base:rtc_json",
+    "../pc:rtc_pc",
+    "../system_wrappers:field_trial_default",
+    "../system_wrappers:metrics_default",
+    "../pc:libjingle_peerconnection",
+    "../modules/audio_device:audio_device",
+    "//third_party/ffmpeg",
+    "//third_party/librtmp",
+  ]
+  suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+}
+
 group("examples") {
   # This target shall build all targets in examples.
   testonly = true
