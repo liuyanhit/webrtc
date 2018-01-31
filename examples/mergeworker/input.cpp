@@ -292,7 +292,7 @@ void Input::StartRtc(IN const Json::Value& m) {
                 frame->Codec(CODEC_AAC);
                 frame->AvFrame()->format = AV_SAMPLE_FMT_S16;
                 frame->AvFrame()->channel_layout = AV_CH_LAYOUT_MONO;
-                frame->AvFrame()->sample_rate = sample_rate / 2;
+                frame->AvFrame()->sample_rate = sample_rate;
                 frame->AvFrame()->channels = number_of_channels;
                 frame->AvFrame()->nb_samples = number_of_frames;
                 av_frame_get_buffer(frame->AvFrame(), 0);

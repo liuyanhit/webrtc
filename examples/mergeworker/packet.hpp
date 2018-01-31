@@ -69,7 +69,9 @@ namespace muxer
         public:
                 MediaFrame(IN const AVFrame* pFrame);
                 MediaFrame();
-                MediaFrame(const MediaFrame &) = delete; // no copy constructor
+                MediaFrame(IN int nSamples, IN int nChannels, IN AVSampleFormat format, IN bool bSilence = false);
+                MediaFrame(IN int nWidth, IN int nHeight, IN AVPixelFormat format, IN int nColor = -1);
+                MediaFrame(const MediaFrame&);
                 ~MediaFrame();
                 AVFrame* AvFrame() const;
 

@@ -36,6 +36,7 @@ public:
     RtcConn(rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> rtcfactory);
     
     void Start();
+
     void OnRecvIceCandidate(const std::string& c);
     void OnRecvSDP(const std::string& sdpstr);
     void OnSuccess();
@@ -43,6 +44,8 @@ public:
     void OnFailure(const std::string& error);
     void OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState new_state);
     void OnAddStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream);
+    void OnAddTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver, 
+            const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>& streams);
     void OnRemoveStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream);
     void OnDataChannel(rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel);
     void OnRenegotiationNeeded();

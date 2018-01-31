@@ -58,6 +58,10 @@ extern "C"
 #define OUT
 #endif
 
+#ifndef INOUT
+#define INOUT
+#endif
+
 #define LogFormat(level, str, fmt, arg...)                              \
         do {                                                            \
                 if ((unsigned int)(level) <= muxer::global::nLogLevel) { \

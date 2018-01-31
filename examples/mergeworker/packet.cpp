@@ -171,6 +171,42 @@ MediaFrame::MediaFrame()
         pAvFrame_ = av_frame_alloc();
 }
 
+MediaFrame::MediaFrame(IN int _nSamples, IN int _nChannels, IN AVSampleFormat _format, IN bool _bSilence)
+        :MediaFrame()
+{
+        // for audio
+        pAvFrame_->nb_samples = _nSamples;
+        pAvFrame_->format = _format;
+        pAvFrame_->channels = _nChannels;
+        pAvFrame_->channel_layout = av_get_default_channel_layout(_nChannels);
+        av_frame_get_buffer(pAvFrame_, 0);
+
+        // cleanup any waves
+        if (_bSilence) {
+                av_samples_set_silence(pAvFrame_->data, 0, pAvFrame_->nb_samples, pAvFrame_->channels,
+                                       (AVSampleFormat)pAvFrame_->format);
+        }
+}
+
+MediaFrame::MediaFrame(IN int _nWidth, IN int _nHeight, IN AVPixelFormat _format, IN int _nColor)
+        :MediaFrame()
+{
+        // for video
+        pAvFrame_->format = _format;
+        pAvFrame_->width = _nWidth;
+        pAvFrame_->height = _nHeight;
+        av_frame_get_buffer(pAvFrame_, 32);
+
+        // fill up the picture with pure color
+        if (_nColor >= 0) {
+                uint8_t nY, nU, nV;
+                color::RgbToYuv(_nColor, nY, nU, nV);
+                memset(pAvFrame_->data[0], nY, pAvFrame_->linesize[0] * _nHeight);
+                memset(pAvFrame_->data[1], nU, pAvFrame_->linesize[1] * (_nHeight / 2));
+                memset(pAvFrame_->data[2], nV, pAvFrame_->linesize[2] * (_nHeight / 2));
+        }
+}
+
 MediaFrame::~MediaFrame()
 {
         av_frame_free(&pAvFrame_);
@@ -179,6 +215,43 @@ MediaFrame::~MediaFrame()
                 av_free(pExtraBuf_);
                 pExtraBuf_ = nullptr;
         }
+}
+
+MediaFrame::MediaFrame(IN const MediaFrame& _frame)
+        :MediaFrame()
+{
+        if (_frame.AvFrame() == nullptr) {
+                return;
+        }
+
+        switch (_frame.Stream()) {
+        case STREAM_VIDEO:
+                pAvFrame_->format = _frame.AvFrame()->format;
+                pAvFrame_->width = _frame.AvFrame()->width;
+                pAvFrame_->height = _frame.AvFrame()->height;
+                av_frame_get_buffer(pAvFrame_, 32);
+                break;
+        case STREAM_AUDIO:
+                pAvFrame_->nb_samples = _frame.AvFrame()->nb_samples;
+                pAvFrame_->format = _frame.AvFrame()->format;
+                pAvFrame_->channels = _frame.AvFrame()->channels;
+                pAvFrame_->channel_layout = _frame.AvFrame()->channel_layout;
+                pAvFrame_->sample_rate = _frame.AvFrame()->sample_rate;
+                av_frame_get_buffer(pAvFrame_, 0);
+                break;
+        default:
+                return;
+        }
+
+        av_frame_copy(pAvFrame_, _frame.AvFrame());
+        av_frame_copy_props(pAvFrame_, _frame.AvFrame());
+
+        // attr held by instance
+        stream_ = _frame.stream_;
+        codec_ = _frame.codec_;
+        nX_ = _frame.nX_;
+        nY_ = _frame.nY_;
+        nZ_ = _frame.nZ_;
 }
 
 AVFrame* MediaFrame::AvFrame() const

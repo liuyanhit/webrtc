@@ -93,14 +93,32 @@ void RtcConn::OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState 
 
 void RtcConn::OnAddStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
     webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
+    webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
+
+    Info("RtcOnAddStream vtracks=%lu atracks=%lu", vtracks.size(), atracks.size());
+
     if (!vtracks.empty()) {
         webrtc::VideoTrackInterface* track = vtracks[0];
+        Info("AddSinkVideo");
         track->AddOrUpdateSink(this, rtc::VideoSinkWants());
     }
-    webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
     if (!atracks.empty()) {
+        Info("AddSinkAudio");
         webrtc::AudioTrackInterface *track = atracks[0];
         track->AddSink(this);
+    }
+}
+
+void RtcConn::OnAddTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver, 
+            const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>& streams)
+{
+    Info("RtcOnAddTrack streams=%lu", streams.size());
+
+    for (auto stream : streams) {
+        webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
+        webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
+
+        Info("RtcOnAddTrack vtracks=%lu atracks=%lu", vtracks.size(), atracks.size());
     }
 }
 
@@ -145,7 +163,7 @@ void RtcConn::OnData(const void* audio_data,
     size_t number_of_channels,
     size_t number_of_frames) 
 {
-    Info("OnFrameAudio %zu", number_of_frames);
+    Info("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
     if (OnAudio != nullptr)
         OnAudio(audio_data, bits_per_sample, sample_rate, number_of_channels, number_of_frames);
 }
