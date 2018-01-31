@@ -6,12 +6,13 @@
 
 Signaling *gS;
 
-unsigned int muxer::global::nLogLevel = 6;
+unsigned int muxer::global::nLogLevel = 4;
 
 DEFINE_string(token, "", "jwt token");
 DEFINE_string(publishUrl, "", "rtmp publish url");
 DEFINE_string(demoWsUrl, "", "demo ws url");
 DEFINE_bool(noMuxer, false, "don't use muxer");
+DEFINE_int(logLevel, 0, "log level");
 
 /*
 class TracePrinter : public webrtc::TraceCallback {
@@ -104,11 +105,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    muxer::global::nLogLevel = FLAG_logLevel;
+
     std::string token(FLAG_token);
     Json::Value tokenjson;
     std::string publishUrl(FLAG_publishUrl);
     std::string demoWsUrl(FLAG_demoWsUrl);
-
+    
     bool isDemo = demoWsUrl != "";
 
     if (!isDemo) {

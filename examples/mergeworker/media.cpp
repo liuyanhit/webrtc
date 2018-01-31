@@ -147,6 +147,8 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
         _buffer.resize(nDstBufSize);
         std::copy(pDstData[0], pDstData[0] + nDstBufSize, _buffer.begin());
 
+        DebugPCM("/tmp/rtc.re1.s16", pDstData[0], nDstBufSize);
+
         // cleanup
         if (pDstData)
                 av_freep(&pDstData[0]);

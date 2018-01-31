@@ -300,14 +300,7 @@ void Input::StartRtc(IN const Json::Value& m) {
                 memcpy(frame->AvFrame()->data[0], audio_data, bits_per_sample/8*number_of_frames);
                 SetAudio(frame);
 
-                /*
-                static FILE *fp;
-                if (fp == NULL) {
-                        fp = fopen("/tmp/rtc.orig.s16", "wb+");
-                }
-                fwrite(audio_data, bits_per_sample/8*number_of_frames, 1, fp);
-                fflush(fp);
-                */
+                DebugPCM("/tmp/rtc.orig.s16", audio_data, bits_per_sample/8*number_of_frames);
         };
 
         c->Start();
@@ -466,16 +459,7 @@ void Input::SetAudio(const std::shared_ptr<MediaFrame>& _pFrame)
                 av_frame_get_buffer(pNewFrame->AvFrame(), 0);
                 std::copy(&sampleBuffer_[0], &sampleBuffer_[nSizeEachFrame], pNewFrame->AvFrame()->data[0]);
         
-                //Info("resample write");
-
-                /*
-                static FILE *fp;
-                if (fp == NULL) {
-                        fp = fopen("/tmp/rtc.s16.re2", "wb+");
-                }
-                fwrite(&sampleBuffer_[0], nSizeEachFrame, 1, fp);
-                fflush(fp);
-                */
+                DebugPCM("/tmp/rtc.re2.s16", &sampleBuffer_[0], nSizeEachFrame);
 
                 // move rest samples to beginning of the buffer
                 std::copy(&sampleBuffer_[nSizeEachFrame], &sampleBuffer_[sampleBuffer_.size()], sampleBuffer_.begin());

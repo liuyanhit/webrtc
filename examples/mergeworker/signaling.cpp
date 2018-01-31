@@ -19,7 +19,7 @@ protected:
 
 RtcConn::RtcConn(
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> rtcfactory
-) : rtcfactory_(rtcfactory) {
+) : rtcfactory_(rtcfactory), streamid_(""), connid_("") {
 }
 
 void RtcConn::Start() {
@@ -152,7 +152,7 @@ void RtcConn::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
 }
 
 void RtcConn::OnFrame(const webrtc::VideoFrame& video_frame) {
-    Info("OnFrameVideo");
+    Verbose("OnFrameVideo");
     if (OnVideo != nullptr)
         OnVideo(video_frame);
 }
@@ -163,7 +163,7 @@ void RtcConn::OnData(const void* audio_data,
     size_t number_of_channels,
     size_t number_of_frames) 
 {
-    Info("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
+    Verbose("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
     if (OnAudio != nullptr)
         OnAudio(audio_data, bits_per_sample, sample_rate, number_of_channels, number_of_frames);
 }

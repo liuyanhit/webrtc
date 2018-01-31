@@ -300,6 +300,7 @@ int AvMuxer::Start()
                                 continue;
                         }
                         if (audioMixer_.Mix(audioFrames, pOutFrame) == 0) {
+                                DebugPCM("/tmp/rtc.mix.s16", pOutFrame->AvFrame()->data[0], pOutFrame->AvFrame()->linesize[0]);
                                 FeedOutputs(pOutFrame);
                         }
                         audioFrames.clear();
@@ -360,7 +361,10 @@ void AvMuxer::FeedOutputs(IN std::shared_ptr<MediaFrame>& _pFrame)
         _pFrame->AvFrame()->pts = nMilliseconds - nInitClock_;
 
         outputs_.Foreach([&](std::shared_ptr<Output>& _pOutput) {
-                        _pOutput->Push(_pFrame);
+                        bool ok = _pOutput->Push(_pFrame);
+                        if (!ok) {
+                                Info("FeedOutputs PushFailed isaudio %d", _pFrame->Stream() == StreamType::STREAM_AUDIO);
+                        }
                 });
 }
 

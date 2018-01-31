@@ -199,7 +199,7 @@ int AvEncoder::PresetH264(IN const std::shared_ptr<MediaFrame>& _pFrame)
         }
 
         // set params
-        av_opt_set(pAvEncoderContext_->priv_data, "preset", "medium", 0);
+        av_opt_set(pAvEncoderContext_->priv_data, "preset", "ultrafast", 0);
         av_opt_set(pAvEncoderContext_->priv_data, "tune", "zerolatency", 0);
 
         return 0;
@@ -1458,11 +1458,13 @@ void Output::Start(IN const std::string& _url)
                                 if (muxedQ_.PopWithTimeout(pFrame, std::chrono::milliseconds(10)) == false) {
                                         continue;
                                 }
+                                Verbose("OutputQueueSize %zu", muxedQ_.Size());
 
                                 int nStatus = 0;
                                 if (pFrame->Stream() == STREAM_VIDEO) {
                                         nStatus = vEncoder->Encode(pFrame, encoderHook);
                                 } else if (pFrame->Stream() == STREAM_AUDIO) {
+                                        DebugPCM("/tmp/rtc.out.s16", pFrame->AvFrame()->data[0], pFrame->AvFrame()->linesize[0]);
                                         nStatus = aEncoder->Encode(pFrame, encoderHook);
                                 }
 

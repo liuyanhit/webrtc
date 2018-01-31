@@ -267,4 +267,17 @@ void SharedQueue<T>::CriticalSection(const std::function<void(std::deque<T>&)> _
         _lambda(m_queue);
 }
 
+#if 1
+#define DebugPCM(filename, p, len) { \
+        static FILE *fp; \
+        if (fp == NULL) { \
+                fp = fopen(filename, "wb+"); \
+        } \
+        fwrite(p, len, 1, fp); \
+        fflush(fp); \
+}
+#else
+#define DebugPCM(...)
+#endif
+
 #endif
