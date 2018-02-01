@@ -57,8 +57,6 @@ class FakeAudioDeviceModule : public AudioDeviceModule {
     _audioDeviceBuffer.SetPlayoutChannels(N_PLAY_CHANNELS);
   }
   virtual ~FakeAudioDeviceModule() {}
-  virtual int32_t AddRef() const { return 0; }
-  virtual int32_t Release() const { return 0; }
 
  private:
   rtc::CriticalSection _critSect;
@@ -181,7 +179,10 @@ class FakeAudioDeviceModule : public AudioDeviceModule {
     playing_ = true;
     return 0; 
   }
-  virtual bool Playing() const { return playing_; }
+  virtual bool Playing() const { 
+    rtc::CritScope lock(&_critSect);
+    return playing_;
+  }
   virtual int32_t StartRecording() {
     rtc::CritScope lock(&_critSect);
     if (recording_)
@@ -194,7 +195,10 @@ class FakeAudioDeviceModule : public AudioDeviceModule {
     recording_ = true;
     return 0; 
   }
-  virtual bool Recording() const { return recording_; }
+  virtual bool Recording() const {
+    rtc::CritScope lock(&_critSect);
+    return recording_;
+  }
   virtual bool AGC() const { return true; }
   virtual bool SpeakerIsInitialized() const { return true; }
   virtual bool MicrophoneIsInitialized() const { return true; }

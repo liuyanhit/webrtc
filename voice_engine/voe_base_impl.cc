@@ -161,7 +161,7 @@ int VoEBaseImpl::Init(
     return -1;
 #else
     // Create the internal ADM implementation.
-    shared_->set_audio_device(new FakeAudioDeviceModule());
+    shared_->set_audio_device(new rtc::RefCountedObject<FakeAudioDeviceModule>());
     if (shared_->audio_device() == nullptr) {
       LOG(LS_ERROR) << "Init() failed to create the ADM";
       return -1;
