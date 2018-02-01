@@ -29,67 +29,70 @@ static std::string getUrlFromToken(const Json::Value& v) {
     return "ws://"+addr+"/signaling";
 }
 
-const double WindowHeight = 1280;
-const double WindowWidth = 720;
-
-void getWindowPos(int idx, int& x, int& y, int& w, int& h, int &z) {
-    if (idx == 0) {
-        x = 0;
-        y = 0;
-        w = (int)WindowWidth;
-        h = (int)WindowHeight;
-        z = 0;
-        return;
-    }
-
-    double margin = WindowWidth * 0.05;
-    double countPerRow = 4;
-    double winW = (WindowWidth - margin*(countPerRow+1)) / countPerRow;
-    double winH = winW * (WindowHeight/WindowWidth);
-    double row = (double)(idx-1) / countPerRow;
-    double col = (double)((idx-1) % (int)countPerRow);
-
-    x = (int)((row+1)*margin + row*winW);
-    y = (int)((col+1)*margin + col*winH);
-    w = (int)winW;
-    h = (int)winH;
-    z = 1;
-}
-
 class PosManager {
 public:
     std::mutex l_;
     std::deque<std::string> names_;
     muxer::AvMuxer *m;
 
+    double WindowHeight = 1280;
+    double WindowWidth = 720;
+
+    void getWindowPos(int idx, int& x, int& y, int& w, int& h, int &z) {
+        if (idx == 0) {
+            x = 0;
+            y = 0;
+            w = (int)WindowWidth;
+            h = (int)WindowHeight;
+            z = 0;
+            return;
+        }
+
+        double margin = WindowWidth * 0.05;
+        double countPerRow = 4;
+        double winW = (WindowWidth - margin*(countPerRow+1)) / countPerRow;
+        double winH = winW * (WindowHeight/WindowWidth);
+        double row = (double)(idx-1) / countPerRow;
+        double col = (double)((idx-1) % (int)countPerRow);
+
+        x = (int)((row+1)*margin + row*winW);
+        y = (int)((col+1)*margin + col*winH);
+        w = (int)winW;
+        h = (int)winH;
+        z = 1;
+    }
+
+    std::function<void (const std::string& name, int x, int y, int w, int h, int z)> OnUpdate;
+
     void update(int idx, const std::string& name) {
         int x, y, w, h, z;
         getWindowPos(idx, x, y, w, h, z);
-        m->ModInputOption(name, "x", x);
-        m->ModInputOption(name, "y", y);
-        m->ModInputOption(name, "w", w);
-        m->ModInputOption(name, "h", h);
-        m->ModInputOption(name, "z", z);
+        Info("PosManagerUIUpdate %d %s (%d,%d) %dx%d %d", idx, name.c_str(), x,y,w,h,z);
+        if (OnUpdate)
+            OnUpdate(name, x, y, w, h, z);
+    }
+
+    void updateAll() {
+        for (int i = 0; i < (int)names_.size(); i++) {
+            update(i, names_[i]);
+        }
     }
 
     void Add(const std::string& name) {
         std::lock_guard<std::mutex> lock(l_);
-        int idx = names_.size();
         names_.push_back(name);
-        update(idx, name);
+        updateAll();
     }
 
     void Remove(const std::string& name) {
+        std::lock_guard<std::mutex> lock(l_);
         for (auto it = names_.begin(); it != names_.end(); it++) {
             if (*it == name) {
                     it = names_.erase(it);
                     break;
             }
         }
-        for (int i = 0; i < (int)names_.size(); i++) {
-            auto name = names_[i];
-            update(i, name);
-        }
+        updateAll();
     }
 };
 
@@ -121,15 +124,27 @@ int main(int argc, char **argv) {
         }
         int r = JwtDecode(token, tokenjson);
         if (r) {
-            Fatal("parse token failed");
+            Fatal("ParseTokenFailed");
         }
 
-        Info("publish url: %s", publishUrl.c_str());
+        Info("PublishUrl %s", publishUrl.c_str());
     }
 
-    auto m = std::make_unique<muxer::AvMuxer>(WindowWidth, WindowHeight);
-    m->SetOption("bg", 0x333333);
+    auto posman = new PosManager();
+    auto m = std::make_unique<muxer::AvMuxer>(posman->WindowWidth, posman->WindowHeight);
 
+    posman->OnUpdate = [&m](const std::string& name, int x, int y, int w, int h, int z) {
+        auto input = m->FindInput(name);
+        if (input == nullptr)
+            return;
+        input->SetOption("x", x);
+        input->SetOption("y", y);
+        input->SetOption("w", w);
+        input->SetOption("h", h);
+        input->SetOption("z", z);
+    };
+
+    m->SetOption("bg", 0x333333);
     muxer::Option outopt;
     outopt.SetOption("vb", 1000);
     outopt.SetOption("ab", 64);
@@ -150,9 +165,6 @@ int main(int argc, char **argv) {
         wsurl = getUrlFromToken(tokenjson);
     }
 
-    auto posman = new PosManager();
-    posman->m = m.get();
-
     gS->OnAddStream = [&](const Json::Value& v) {
         muxer::Option inopt;
         std::string streamid = v["streamid"].asString();
@@ -172,13 +184,13 @@ int main(int argc, char **argv) {
         m->Start();
     }
 
-    Info("wsurl %s", wsurl.c_str());
+    Info("WsURL %s", wsurl.c_str());
 
     gS->connectRun(wsurl);
     gS->wrtc_signal_thread_.Join();
     gS->wrtc_work_thread_.Join();
 
-    Info("quit");
+    Info("Quit");
 
     return 0;
 }

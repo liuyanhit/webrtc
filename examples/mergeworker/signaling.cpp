@@ -41,7 +41,7 @@ void RtcConn::Start() {
     offeropt.offer_to_receive_video = 1;
     wrtcconn_->CreateOffer((webrtc::CreateSessionDescriptionObserver *)this, offeropt);
 
-    Info("rtcconn start");
+    Info("RtcConnStarted");
 }
 
 void RtcConn::OnRecvIceCandidate(const std::string& c_) {
@@ -84,11 +84,11 @@ void RtcConn::OnSuccess(webrtc::SessionDescriptionInterface* desc) {
 }
 
 void RtcConn::OnFailure(const std::string& error) {
-    Info("CreateDescOnFailure: %s", error.c_str()); 
+    Info("CreateDescOnFailure %s", error.c_str()); 
 }
 
 void RtcConn::OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState new_state) {
-    Info("OnSignalingChange: %d", new_state);
+    Info("OnSignalingChange %d", new_state);
 }
 
 void RtcConn::OnAddStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
@@ -133,7 +133,7 @@ void RtcConn::OnRenegotiationNeeded() {
 }    
 
 void RtcConn::OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state) {
-    Info("OnIceConnectionChange: %d", new_state);
+    Info("OnIceConnectionChange %d", new_state);
 }
 
 void RtcConn::OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheringState new_state) {
@@ -223,12 +223,12 @@ Signaling::Signaling() {
     );
 
     h_.onDisconnection([](uWS::WebSocket<uWS::CLIENT> *ws, int code, char *message, size_t length) {
-        Info("ws disconnected");
+        Info("WsDisconnected");
     });
 
     h_.onMessage([this](uWS::WebSocket<uWS::CLIENT> *ws, char *message, size_t length, uWS::OpCode opCode) {
         auto ls = std::string(message, length);
-        Info("ws recv: %s", ls.c_str());
+        Info("WsRecv %s", ls.c_str());
 
         std::string type;
 
@@ -250,7 +250,7 @@ Signaling::Signaling() {
     });
 
     h_.onConnection([this](uWS::WebSocket<uWS::CLIENT> *ws, uWS::HttpRequest req) {
-        Info("ws connected");
+        Info("WsConnected");
         wscli_ = ws;
         onConnection();
     });
@@ -276,7 +276,7 @@ void Signaling::send(const char *type, const Json::Value& value) {
     }
     s += vs;
 
-    Info("ws send: %s", s.c_str());
+    Info("WsSend %s", s.c_str());
     wscli_->send(s.c_str());
 }
 
