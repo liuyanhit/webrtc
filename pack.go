@@ -193,16 +193,16 @@ func packlibLinux() error {
 		}
 		src := e.Realpath
 		dstdir := "lib"
-		dst := path.Join(dstdir, e.Name)
 		if e.Name == "mergeworker" {
 			dstdir = "bin"
 		}
+		dst := path.Join(dstdir, e.Name)
 		c := exec.Command("cp", "-f", src, dst)
 		if err := c.Run(); err != nil {
 			err = fmt.Errorf("cp %s %s: %s", src, dst, err)
 			return err
 		}
-		fmt.Println(e)
+		fmt.Println(src, dst)
 	}
 	c := exec.Command("cp", "-f", ldlinuxpath, "lib/ld-linux.so")
 	if err := c.Run(); err != nil {
@@ -212,6 +212,8 @@ func packlibLinux() error {
 }
 
 func runPack() error {
+	os.RemoveAll("lib")
+	os.RemoveAll("bin")
 	os.Mkdir("lib", 0744)
 	os.Mkdir("bin", 0744)
 	switch runtime.GOOS {
