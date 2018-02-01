@@ -240,11 +240,6 @@ void Input::StartRtc(IN const Json::Value& m) {
         rtcconn_ = c;
 
         c->OnVideo = [this](const webrtc::VideoFrame& rtcframe) {
-                if (rtcframe.height() == 0 || rtcframe.width() == 0) {
-                        Warn("RtcVideoFrame invalid size %dx%d", rtcframe.height(), rtcframe.width());
-                        return;
-                }
-
                 std::shared_ptr<MediaFrame> frame = std::make_shared<MediaFrame>();
                 frame->Stream(STREAM_VIDEO);
                 frame->Codec(CODEC_H264);
@@ -268,32 +263,26 @@ void Input::StartRtc(IN const Json::Value& m) {
                                 ;
                 }
 
-                int rtclinesize[3] = {
-                        i420->StrideY(),
-                        i420->StrideU(),
-                        i420->StrideV(),
-                };
-                int rtcdatasize[3] = {
-                        i420->StrideY()*rtcframe.height(),
-                        i420->StrideU()*i420->ChromaHeight(),
-                        i420->StrideV()*i420->ChromaHeight(),
-                };
                 const uint8_t* rtcdata[3] = {
                         i420->DataY(),
                         i420->DataU(),
                         i420->DataV(),
                 };
+                int rtclinesize[3] = {
+                        i420->StrideY(),
+                        i420->StrideU(),
+                        i420->StrideV(),
+                };
+                int height[3] = {
+                        rtcframe.height(),
+                        i420->ChromaHeight(),
+                        i420->ChromaHeight(),
+                };
 
                 for (int i = 0; i < 3; i++) {
-                        if (rtcdata[i] == NULL) {
-                                Warn("RtcVideoBuffer invalid data[%d]==NULL", i);
-                                return;
-                        }
-                        if (rtclinesize[i] > frame->AvFrame()->linesize[i]) {
-                                Warn("RtcVideoBuffer invalid linesize[%d]=%d > %d", i, rtclinesize[i], frame->AvFrame()->linesize[i]);
-                                return;
-                        }
-                        memcpy(frame->AvFrame()->data[i], rtcdata[i], rtcdatasize[i]);
+                        yuv::CopyLine(frame->AvFrame()->data[i], frame->AvFrame()->linesize[i], 
+                                rtcdata[i], rtclinesize[i], height[i]
+                        );
                 }
 
                 /*

@@ -280,4 +280,17 @@ void SharedQueue<T>::CriticalSection(const std::function<void(std::deque<T>&)> _
 #define DebugPCM(...)
 #endif
 
+namespace yuv {
+        inline void CopyLine(uint8_t *dst, int dstlinesize, const uint8_t *src, int srclinesize, int height) {
+                if (dstlinesize == srclinesize) {
+                        memcpy(dst, src, srclinesize*height);
+                        return;
+                }
+                int minlinesize = std::min(dstlinesize, srclinesize);
+                for (int i = 0; i < height; i++) {
+                        memcpy(dst + i*dstlinesize, src + i*srclinesize, minlinesize);
+                }
+        }
+}
+
 #endif
