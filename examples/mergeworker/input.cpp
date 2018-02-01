@@ -269,6 +269,11 @@ void Input::StartRtc(IN const Json::Value& m) {
                 }
 
                 int rtclinesize[3] = {
+                        i420->StrideY(),
+                        i420->StrideU(),
+                        i420->StrideV(),
+                };
+                int rtcdatasize[3] = {
                         i420->StrideY()*rtcframe.height(),
                         i420->StrideU()*i420->ChromaHeight(),
                         i420->StrideV()*i420->ChromaHeight(),
@@ -288,7 +293,7 @@ void Input::StartRtc(IN const Json::Value& m) {
                                 Warn("RtcVideoBuffer invalid linesize[%d]=%d > %d", i, rtclinesize[i], frame->AvFrame()->linesize[i]);
                                 return;
                         }
-                        memcpy(frame->AvFrame()->data[i], rtcdata[i], rtclinesize[i]);
+                        memcpy(frame->AvFrame()->data[i], rtcdata[i], rtcdatasize[i]);
                 }
 
                 /*
