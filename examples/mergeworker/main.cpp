@@ -12,7 +12,7 @@ DEFINE_string(token, "", "jwt token");
 DEFINE_string(publishUrl, "", "rtmp publish url");
 DEFINE_string(demoWsUrl, "", "demo ws url");
 DEFINE_bool(noMuxer, false, "don't use muxer");
-DEFINE_int(logLevel, 0, "log level");
+DEFINE_int(logLevel, 4, "log level");
 
 /*
 class TracePrinter : public webrtc::TraceCallback {
@@ -156,13 +156,15 @@ int main(int argc, char **argv) {
     gS->OnAddStream = [&](const Json::Value& v) {
         muxer::Option inopt;
         std::string streamid = v["streamid"].asString();
+        Info("MergeOnAddStream %s", streamid.c_str());
         m->AddRtcInput(streamid, v, inopt);
         posman->Add(streamid);
     };
 
     gS->OnRemoveStream = [&](const Json::Value& v) {
         std::string streamid = v["streamid"].asString();
-        m->RemoveInput(streamid);
+        Info("MergeOnRemoveStream %s", streamid.c_str());
+        m->ModInputOption(streamid, muxer::options::hidden, true);
         posman->Remove(streamid);
     };
 
