@@ -14,16 +14,6 @@ DEFINE_string(demoWsUrl, "", "demo ws url");
 DEFINE_bool(noMuxer, false, "don't use muxer");
 DEFINE_int(logLevel, 4, "log level");
 
-/*
-class TracePrinter : public webrtc::TraceCallback {
-public:
-    void Print(webrtc::TraceLevel level, const char* message, int length) override {
-        write(2, message, length);
-        write(2, "\n", 1);
-    }
-};
-*/
-
 static std::string getUrlFromToken(const Json::Value& v) {
     std::string addr = v["roomserveraddr"].asString();
     return "ws://"+addr+"/signaling";
@@ -97,12 +87,6 @@ public:
 };
 
 int main(int argc, char **argv) {
-    /*
-    webrtc::Trace::CreateTrace();
-    webrtc::Trace::SetTraceCallback(new TracePrinter());
-    webrtc::Trace::set_level_filter(webrtc::kTraceAll);
-    */
-
     if (rtc::FlagList::SetFlagsFromCommandLine(&argc, argv, false) != 0) {
         rtc::FlagList::Print(NULL, false);        
         return -1;
@@ -114,7 +98,7 @@ int main(int argc, char **argv) {
     Json::Value tokenjson;
     std::string publishUrl(FLAG_publishUrl);
     std::string demoWsUrl(FLAG_demoWsUrl);
-    
+
     bool isDemo = demoWsUrl != "";
 
     if (!isDemo) {

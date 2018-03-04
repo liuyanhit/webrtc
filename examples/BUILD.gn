@@ -16,6 +16,44 @@ if (is_android) {
   import("//build/config/ios/rules.gni")
 }
 
+rtc_executable("wrtccmdhost") {
+  sources = [
+    "wrtccmdhost/cmdhost.cpp",
+    "wrtccmdhost/cmdhost.hpp",
+    "wrtccmdhost/msgpump.hpp",
+    "wrtccmdhost/msgpump.cpp",
+    "wrtccmdhost/wrtcconn.cpp",
+    "wrtccmdhost/wrtcconn.hpp",
+    "wrtccmdhost/common.hpp",
+    "wrtccmdhost/input.hpp",
+    "wrtccmdhost/input.cpp",
+    "wrtccmdhost/main.cpp",
+    "wrtccmdhost/media.cpp",
+    "wrtccmdhost/media.hpp",
+    "wrtccmdhost/muxer.cpp",
+    "wrtccmdhost/muxer.hpp",
+    "wrtccmdhost/output.cpp",
+    "wrtccmdhost/output.hpp",
+    "wrtccmdhost/packet.cpp",
+    "wrtccmdhost/packet.hpp",
+    "wrtccmdhost/util.hpp",
+  ]
+  cflags = [ ]
+  defines = [ ]
+  deps = [
+    "../rtc_base:rtc_base",
+    "../rtc_base:rtc_json",
+    "../pc:rtc_pc",
+    "../system_wrappers:field_trial_default",
+    "../system_wrappers:metrics_default",
+    "../pc:libjingle_peerconnection",
+    "../modules/audio_device:audio_device",
+    "//third_party/ffmpeg",
+    "//third_party/librtmp",
+  ]
+  suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+}
+
 rtc_executable("mergeworker") {
   sources = [
     "mergeworker/signaling.cpp",
@@ -35,6 +73,12 @@ rtc_executable("mergeworker") {
     "mergeworker/base64.h",
     "mergeworker/jwt.hpp",
     "mergeworker/jwt.cpp",
+    "mergeworker/lpcctrl.cpp",
+    "mergeworker/lpcctrl.hpp",
+    "mergeworker/msgpump.cpp",
+    "mergeworker/msgpump.hpp",
+    "mergeworker/wrtcconn.cpp",
+    "mergeworker/wrtcconn.hpp",
     "mergeworker/main.cpp",
   ]
   cflags = [ ]
