@@ -8,6 +8,7 @@
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/json.h"
+#include "rtc_base/refcount.h"
 
 class CmdHost {
 public:
@@ -15,7 +16,12 @@ public:
 
     void Run();
 
-private:
+    class CmdDoneObserver: public rtc::RefCountInterface {
+    public:
+        virtual void OnSuccess(Json::Value& res) = 0;
+        virtual void OnFailure(int code, const std::string& error) = 0;
+    };
+
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;
 
     rtc::Thread wrtc_work_thread_;
@@ -26,9 +32,10 @@ private:
 
     MsgPump* msgpump_;
 
-    WRTCConn* newConn();
-    //rtc::scoped_refptr<WRTCConn> findConn(const std::string& id);
+    void writeMessage(const std::string& type, const Json::Value& msg);
+    WRTCConn *checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
 
-    void handleCreateOfferReq(const Json::Value& req, Json::Value& res);
+    void handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleReq(const std::string& type, const Json::Value& req);
 };

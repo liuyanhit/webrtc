@@ -19,7 +19,6 @@ int MsgPump::WriteMessage(const std::string& type, const Json::Value& message) {
     a[2] = (len>>8)&0xff;
     a[3] = len&0xff;
 
-
     if (fwrite(a, 1, sizeof(a), stdout) != sizeof(a)) {
         return -1;
     }
@@ -30,6 +29,9 @@ int MsgPump::WriteMessage(const std::string& type, const Json::Value& message) {
         return -1;
     }
     if (fwrite(ms.c_str(), 1, ms.size(), stdout) != ms.size()) {
+        return -1;
+    }
+    if (fflush(stdout) != 0) {
         return -1;
     }
 
@@ -45,7 +47,7 @@ int MsgPump::readMessage(std::string& type, Json::Value& message) {
     }
 
     uint32_t len = (a[0]<<24)|(a[1]<<16)|(a[2]<<8)|a[3];
-    char *data = (char *)malloc(len);
+    char *data = (char *)malloc(len+1);
     int r = 0;
     int eq = -1;
     Json::Reader jr;
@@ -54,6 +56,9 @@ int MsgPump::readMessage(std::string& type, Json::Value& message) {
     if (fr != (int)len) {
         goto out_free;
     }
+    data[len] = 0;
+
+    Verbose("ReadCmd %s", data);
 
     for (int i = 0; i < (int)len; i++) {
         if (data[i] == '=') {

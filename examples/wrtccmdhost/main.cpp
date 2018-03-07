@@ -13,6 +13,8 @@ int main(int argc, char **argv) {
 
     muxer::global::nLogLevel = FLAG_logLevel;
 
+    Verbose("Started");
+
     CmdHost cmdhost;
     cmdhost.Run();
 
