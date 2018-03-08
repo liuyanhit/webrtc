@@ -1,4 +1,5 @@
 #include "cmdhost.hpp"
+#include <stdlib.h>
 
 const std::string kId = "id";
 const std::string kCode = "code";
@@ -12,15 +13,10 @@ const std::string errInvalidParamsString = "invalid params";
 const std::string mtEcho = "echo";
 const std::string mtNewConn = "new-conn";
 const std::string mtCreateOfferSetLocalDesc = "create-offer-set-local-desc";
+const std::string mtSetRemoteDesc = "set-remote-desc";
 const std::string mtOnIceCandidate = "on-ice-candidate";
 const std::string mtOnIceStateChange = "on-ice-state-change";
-
-CmdHost::CmdHost(): conn_map_() {
-    auto on_msg = [this](const std::string& type, const Json::Value& req) {
-        handleReq(type, req);
-    };
-    msgpump_ = new MsgPump(on_msg);
-}
+const std::string mtAddIceCandidate = "add-ice-candidate";
 
 void CmdHost::Run() {
     wrtc_signal_thread_.Start();
@@ -61,20 +57,20 @@ class ConnObserver: public WRTCConn::ConnObserver {
 public:
     ConnObserver(CmdHost *h) : h_(h) {}
     void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-        Verbose("CmdHostOnIceCandidate");
-
         std::string sdp;
         candidate->ToString(&sdp);
         Json::Value res;
         res[kSdp] = sdp;
-        res[kId] = id_;
-        h_->writeMessage(mtOnIceCandidate, res);
+        writeMessage(mtOnIceCandidate, res);
     }
     void OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state) {
         Json::Value res;
         res["state"] = iceStateToString(new_state);
+        writeMessage(mtOnIceStateChange, res);
+    }
+    void writeMessage(const std::string& type, Json::Value& res) {
         res[kId] = id_;
-        h_->writeMessage(mtOnIceStateChange, res);
+        h_->writeMessage(type, res);
     }
     virtual ~ConnObserver() {}
     CmdHost *h_;
@@ -168,33 +164,126 @@ void CmdHost::handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_
     conn->CreateOfferSetLocalDesc(offeropt, new rtc::RefCountedObject<CreateOfferSetLocalDescObserver>(observer));
 }
 
+class SetDescObserver: public WRTCConn::SetDescObserver {
+public:
+    SetDescObserver(rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) : observer_(observer) {}
+
+    void OnSuccess() {
+        Json::Value res;
+        observer_->OnSuccess(res);
+    }
+    void OnFailure(const std::string& error) {
+        observer_->OnFailure(errInvalidParams, error);
+    }
+
+    rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer_;
+};
+
+static std::string jsonAsString(const Json::Value& v) {
+    if (!v.isString()) {
+        return "";
+    }
+    return v.asString();
+}
+
+void CmdHost::handleSetRemoteDesc(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
+    auto conn = checkConn(req, observer);
+    if (conn == NULL) {
+        return;
+    }
+
+    std::string sdp = jsonAsString(req["sdp"]);
+    webrtc::SdpParseError err;
+    auto desc = CreateSessionDescription("answer", sdp, &err); 
+    if (!desc) {
+        observer->OnFailure(errInvalidParams, err.description);
+        return;
+    }
+
+    conn->SetRemoteDesc(desc, new rtc::RefCountedObject<SetDescObserver>(observer));
+}
+
+void CmdHost::handleAddIceCandidate(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
+    auto conn = checkConn(req, observer);
+    if (conn == NULL) {
+        return;
+    }
+
+    std::string cs = jsonAsString(req["candidate"]);
+    Json::Reader jr;
+    Json::Value c;
+    if (!jr.parse(cs.c_str(), cs.c_str()+cs.size(), c, false)) {
+        observer->OnFailure(errInvalidParams, "parse candidate failed");
+        return;
+    }
+
+    std::string sdp_mid = jsonAsString(c["sdpMid"]);
+    int sdp_mlineindex = atoi(jsonAsString(c["sdpMLineIndex"]).c_str());
+    std::string sdp = jsonAsString(c["candidate"]);
+
+    webrtc::SdpParseError err;
+    auto candidate = webrtc::CreateIceCandidate(sdp_mid, sdp_mlineindex, sdp, &err);
+    if (!candidate) {
+        observer->OnFailure(errInvalidParams, err.description);
+        return;
+    }
+
+    if (!conn->AddIceCandidate(candidate)) {
+        observer->OnFailure(errInvalidParams, "AddIceCandidate failed");
+        return;
+    }
+
+    Json::Value v;
+    observer->OnSuccess(v);
+}
+
 class CmdDoneWriteResObserver: public CmdHost::CmdDoneObserver {
 public:
-    CmdDoneWriteResObserver(CmdHost *h, const std::string& type) : h_(h), type_(type) {}
+    CmdDoneWriteResObserver(rtc::scoped_refptr<MsgPump::Request> req) : req_(req) {}
     void OnSuccess(Json::Value& res) {
         res[kCode] = 0;
-        writeMessage(res);
+        req_->WriteResponse(res);
     }
     void OnFailure(int code, const std::string& error) {
         Json::Value res;
         res[kCode] = code;
         res[kError] = error;
-        writeMessage(res);
+        req_->WriteResponse(res);
     }
-    void writeMessage(const Json::Value& res) {
-        h_->writeMessage(type_+"-res", res);
-    }
-    CmdHost *h_;
-    std::string type_;
+    rtc::scoped_refptr<MsgPump::Request> req_;
 };
 
+void CmdHost::handleMsg(const std::string& type, const Json::Value& body) {
+}
 
-void CmdHost::handleReq(const std::string& type, const Json::Value& req) {
+void CmdHost::handleReq(rtc::scoped_refptr<MsgPump::Request> req) {
+    auto type = req->type;
     if (type == mtEcho) {
-        writeMessage(type+"-res", req);
+        Json::Value res = req->body;
+        req->WriteResponse(res);
     } else if (type == mtNewConn) {
-        handleNewConn(req, new rtc::RefCountedObject<CmdDoneWriteResObserver>(this, type));
+        handleNewConn(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtCreateOfferSetLocalDesc) {
-        handleCreateOfferSetLocalDesc(req, new rtc::RefCountedObject<CmdDoneWriteResObserver>(this, type));
+        handleCreateOfferSetLocalDesc(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtSetRemoteDesc) {
+        handleSetRemoteDesc(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtAddIceCandidate) {
+        handleAddIceCandidate(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     }
+}
+
+class MsgPumpObserver: public MsgPump::Observer {
+public:
+    MsgPumpObserver(CmdHost *h) : h_(h) {}
+    void OnRequest(rtc::scoped_refptr<MsgPump::Request> req) {
+        h_->handleReq(req);
+    }
+    void OnMessage(const std::string& type, const Json::Value& body) {
+        h_->handleMsg(type, body);
+    }
+    CmdHost* h_;
+};
+
+CmdHost::CmdHost(): conn_map_() {
+    msgpump_ = new MsgPump(new MsgPumpObserver(this));
 }

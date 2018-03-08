@@ -24,7 +24,6 @@ public:
     }
     void OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheringState new_state) {}
     void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
-        Verbose("WRTCConnOnIceCandidate");
         conn_observer_->OnIceCandidate(candidate);
     }
     virtual ~PeerConnectionObserver() {}
@@ -93,4 +92,15 @@ void WRTCConn::CreateOfferSetLocalDesc(
     rtc::scoped_refptr<WRTCConn::CreateDescObserver> observer
 ) {
     pc_->CreateOffer(new rtc::RefCountedObject<CreateOfferSetDescObserver>(pc_, observer), offeropt);
+}
+
+void WRTCConn::SetRemoteDesc(
+    webrtc::SessionDescriptionInterface* desc,
+    rtc::scoped_refptr<WRTCConn::SetDescObserver> observer
+) {
+    pc_->SetRemoteDescription(observer, desc);
+}
+
+bool WRTCConn::AddIceCandidate(webrtc::IceCandidateInterface* candidate) {
+    return pc_->AddIceCandidate(candidate);
 }

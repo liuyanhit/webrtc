@@ -20,6 +20,14 @@ public:
         ~ConnObserver() {}
     };
 
+    class CreateDescObserver: public rtc::RefCountInterface {
+    public:
+        virtual void OnSuccess(const std::string& desc) = 0;
+        virtual void OnFailure(const std::string& error) = 0;
+    };
+    
+    typedef webrtc::SetSessionDescriptionObserver SetDescObserver;
+
     WRTCConn(
         rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory, 
         webrtc::PeerConnectionInterface::RTCConfiguration rtcconf,
@@ -27,15 +35,15 @@ public:
     );
     std::string ID();
 
-    class CreateDescObserver: public rtc::RefCountInterface {
-    public:
-        virtual void OnSuccess(const std::string& desc) = 0;
-        virtual void OnFailure(const std::string& error) = 0;
-    };
     void CreateOfferSetLocalDesc(
         webrtc::PeerConnectionInterface::RTCOfferAnswerOptions offeropt,
         rtc::scoped_refptr<WRTCConn::CreateDescObserver> observer
     );
+    void SetRemoteDesc(
+        webrtc::SessionDescriptionInterface* desc,
+        rtc::scoped_refptr<WRTCConn::SetDescObserver> observer
+    );
+    bool AddIceCandidate(webrtc::IceCandidateInterface* candidate);
 
 private:
     std::string id_;

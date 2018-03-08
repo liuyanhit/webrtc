@@ -36,6 +36,9 @@ public:
     WRTCConn *checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
 
     void handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleSetRemoteDesc(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
+    void handleAddIceCandidate(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
     void handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
-    void handleReq(const std::string& type, const Json::Value& req);
+    void handleReq(rtc::scoped_refptr<MsgPump::Request> req);
+    void handleMsg(const std::string& type, const Json::Value& body);
 };

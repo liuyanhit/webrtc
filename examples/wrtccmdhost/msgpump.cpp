@@ -2,10 +2,6 @@
 #include <stdio.h>
 #include <stdint.h>
 
-MsgPump::MsgPump(MsgPumpReadMessageCb on_msg) {
-    on_msg_ = on_msg;
-}
-
 int MsgPump::WriteMessage(const std::string& type, const Json::Value& message) {
     std::lock_guard<std::mutex> lock(wlock_);
 
@@ -83,6 +79,10 @@ out_free:
     return r;
 }
 
+void MsgPump::Request::WriteResponse(const Json::Value& res) {
+    p_->WriteMessage("$res16-"+reqid_, res);
+}
+
 void MsgPump::Run() {
     for (;;) {
         std::string type;
@@ -90,8 +90,16 @@ void MsgPump::Run() {
         int r = readMessage(type, message);
         if (r < 0)
             break;
-        if (on_msg_) {
-            on_msg_(type, message);
+        
+        if (!strncmp(type.c_str(), "$req16-", 7)) {
+            if (type.size() > 7+16) {
+                auto reqid = type.substr(7, 16);
+                auto type2 = type.substr(7+16);
+                auto req = new rtc::RefCountedObject<MsgPump::Request>(this, reqid, type2, message);
+                observer_->OnRequest(req);
+            }
+        } else {
+            observer_->OnMessage(type, message);
         }
     }
 }
