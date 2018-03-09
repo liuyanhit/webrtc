@@ -1,5 +1,5 @@
-#ifndef __WRTCINPUT_HPP__
-#define __WRTCINPUT_HPP__
+#ifndef __WRTC_SIGNALING_HPP__
+#define __WRTC_SIGNALING_HPP__
 
 #include "uWS.h"
 
@@ -10,12 +10,64 @@
 #include "rtc_base/json.h"
 #include "audio_device.h"
 #include "common.hpp"
+#include "curl/curl.h"
+
+class CurlWrapper {
+public:
+	CurlWrapper() 
+		: curl_(nullptr), slist_(nullptr) {
+		curl_global_init(CURL_GLOBAL_ALL);
+		curl_ = curl_easy_init();
+	}
+
+	~CurlWrapper() {
+		if (slist_ != nullptr) {
+			curl_slist_free_all(slist_);
+			slist_ = nullptr;
+		}
+		curl_easy_cleanup(curl_);  
+		curl_global_cleanup();
+	}
+
+	template <typename T>
+	void CurlEasySetopt(CURLoption opt, T param) {
+		curl_easy_setopt(curl_, opt, param);	
+	}
+
+	CURLcode CurlEasyPerform() {
+		return curl_easy_perform(curl_);
+	}
+
+	struct curl_slist* CurlSlistAppend(const char* str) {
+		slist_ = curl_slist_append(slist_, str);
+		return slist_;
+	}
+
+private:
+	CURL* curl_;
+	struct curl_slist* slist_;
+	RTC_DISALLOW_COPY_AND_ASSIGN(CurlWrapper);
+};
+
+template <>
+inline void CurlWrapper::CurlEasySetopt<struct curl_slist*>(CURLoption opt, struct curl_slist* slist) {
+	curl_easy_setopt(curl_, opt, slist);
+}
+
+class StatisticsReport {
+public:
+	uint32_t 	width_;
+	uint32_t	height_;
+	uint64_t	bytesSent_;
+	uint64_t	bytesReceived_;
+};
 
 class RtcConn : public 
     webrtc::CreateSessionDescriptionObserver, 
     webrtc::PeerConnectionObserver,
     rtc::VideoSinkInterface<webrtc::VideoFrame>,
-    webrtc::AudioTrackSinkInterface
+    webrtc::AudioTrackSinkInterface,
+	public webrtc::RTCStatsCollectorCallback
 {
 public:
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> wrtcconn_;
@@ -58,6 +110,15 @@ public:
         int sample_rate,
         size_t number_of_channels,
         size_t number_of_frames);
+
+	void OnStatsDelivered(const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report);
+
+	int AddRef()const;
+	int Release()const;
+
+	StatisticsReport		stats_report_;
+	mutable volatile int	ref_count_ = 0;
+	std::chrono::high_resolution_clock::time_point last_time_;
 };
 
 class WThread : public rtc::Thread {
@@ -79,14 +140,24 @@ public:
     WThread wrtc_work_thread_;
     WThread wrtc_signal_thread_;
 
+	std::thread stats_thread_;
+	std::atomic_bool stats_thread_exit_flag_;
+
     std::mutex rtcconn_map_lock_;
     std::map<std::string, rtc::scoped_refptr<RtcConn>> rtcconn_map_;
+
+	std::thread notify_thread_;
+	std::atomic_bool notify_thread_exit_flag_;
+	std::mutex stats_json_lock_;
+	Json::Value statsJson_;
 
     bool is_demo_;
     Json::Value tokenjson_;
     std::string token_;
+	std::string posturl_;
 
     Signaling();
+	~Signaling();
 
     rtc::scoped_refptr<RtcConn> NewRtcConn(const Json::Value &m);
 
@@ -100,6 +171,10 @@ public:
 
     void authorize();
     void subscribe(const std::string& streamid);
+
+	void getStatistics();
+	void notifyStats();
+	void onStatsUpdate(std::chrono::duration<uint64_t, std::milli> duration);
 
     void handleWebRtcAnswer(const Json::Value& m);
     void handleWebRtcCandidate(const Json::Value& m);

@@ -3,6 +3,7 @@
 #include "jwt.hpp"
 #include "rtc_base/flags.h"
 #include "common_types.h"
+#include "videosource.hpp"
 
 Signaling *gS;
 
@@ -11,8 +12,10 @@ unsigned int muxer::global::nLogLevel = 4;
 DEFINE_string(token, "", "jwt token");
 DEFINE_string(publishUrl, "", "rtmp publish url");
 DEFINE_string(demoWsUrl, "", "demo ws url");
+DEFINE_string(jobId, "", "job id");
 DEFINE_bool(noMuxer, false, "don't use muxer");
 DEFINE_int(logLevel, 4, "log level");
+DEFINE_string(postUrl, "", "http post url");
 
 static std::string getUrlFromToken(const Json::Value& v) {
     std::string addr = v["roomserveraddr"].asString();
@@ -98,8 +101,11 @@ int main(int argc, char **argv) {
     Json::Value tokenjson;
     std::string publishUrl(FLAG_publishUrl);
     std::string demoWsUrl(FLAG_demoWsUrl);
-
+	std::string jobId(FLAG_jobId);
+	std::string postUrl(FLAG_postUrl);
+    
     bool isDemo = demoWsUrl != "";
+    isDemo = true;
 
     if (!isDemo) {
         if (token == "" || publishUrl == "") {
@@ -113,6 +119,17 @@ int main(int argc, char **argv) {
 
         Info("PublishUrl %s", publishUrl.c_str());
     }
+
+	// TODO test decode json token
+	if (token != "") {
+		do {
+			int r = JwtDecode(token, tokenjson);	
+			if (r != 0) {
+				Error("decode token failed: err code(%d)", r);
+				break;
+			}	
+		} while(0);
+	}
 
     auto posman = new PosManager();
     auto m = std::make_unique<muxer::AvMuxer>(posman->WindowWidth, posman->WindowHeight);
@@ -141,6 +158,7 @@ int main(int argc, char **argv) {
     gS->token_ = token;
     gS->tokenjson_ = tokenjson;
     gS->is_demo_ = isDemo;
+	gS->posturl_ = postUrl;
 
     std::string wsurl;
     if (isDemo) {
@@ -167,6 +185,10 @@ int main(int argc, char **argv) {
     if (!FLAG_noMuxer) {
         m->Start();
     }
+
+	std::unique_ptr<FakeVideoSource> p = std::make_unique<FakeVideoSource>();
+	p->SetVideoFormat(640, 480, 30, cricket::FOURCC_I420);
+	std::thread t(&FakeVideoSource::Start, p.get());
 
     Info("WsURL %s", wsurl.c_str());
 

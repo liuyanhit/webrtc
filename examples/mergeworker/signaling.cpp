@@ -20,9 +20,11 @@ protected:
 RtcConn::RtcConn(
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> rtcfactory
 ) : rtcfactory_(rtcfactory), streamid_(""), connid_("") {
+	Info("================= construct rtcconnection =========");
 }
 
 void RtcConn::Start() {
+	Info("Rtc Connection Start ==============");
     webrtc::PeerConnectionInterface::IceServer icesrv;
     webrtc::PeerConnectionInterface::RTCConfiguration rtcconf;
     /*
@@ -152,6 +154,7 @@ void RtcConn::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
 }
 
 void RtcConn::OnFrame(const webrtc::VideoFrame& video_frame) {
+    Info("================================ onFrame");
     Verbose("OnFrameVideo");
     if (OnVideo != nullptr)
         OnVideo(video_frame);
@@ -163,12 +166,46 @@ void RtcConn::OnData(const void* audio_data,
     size_t number_of_channels,
     size_t number_of_frames) 
 {
+	Info("=============================== onData");
     Verbose("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
     if (OnAudio != nullptr)
         OnAudio(audio_data, bits_per_sample, sample_rate, number_of_channels, number_of_frames);
 }
 
+// TODO
+void RtcConn::OnStatsDelivered(const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
+
+	Json::Value value;
+	Json::Reader reader;
+	if (!reader.parse(report->ToJson(), value)) {
+		Error("parse stats report string failed");
+		return;
+	}
+
+	auto now = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time_);
+	last_time_ = now;
+	for (uint32_t i = 0; i < value.size(); ++i) {
+		stats_report_.width_ = value[i]["frameWidth"].asInt();
+		stats_report_.height_ = value[i]["frameHeight"].asInt();
+		stats_report_.bytesSent_ = value[i]["bytesSent"].asInt();
+		stats_report_.bytesReceived_ = value[i]["bytesReceived"].asInt();
+	}
+
+	gS->onStatsUpdate(duration);
+}
+
+int RtcConn::AddRef()const {
+	return rtc::AtomicOps::Increment(&ref_count_);
+}
+
+int RtcConn::Release()const {
+	int count = rtc::AtomicOps::Decrement(&ref_count_);
+	return count;
+}
+
 rtc::scoped_refptr<RtcConn> Signaling::NewRtcConn(const Json::Value& m) {
+	Info("new rtc connection...");
     auto conn = new rtc::RefCountedObject<RtcConn>(rtcfactory_);
 
     std::string streamid = m["streamid"].asString();
@@ -256,9 +293,22 @@ Signaling::Signaling() {
     });
 }
 
+Signaling::~Signaling() {
+	stats_thread_exit_flag_.store(true);	
+	if (stats_thread_.joinable()) {
+		stats_thread_.join();
+	}
+	notify_thread_exit_flag_.store(true);
+	if (notify_thread_.joinable()) {
+		notify_thread_.join();
+	}
+}
+
 void Signaling::addRtcConn(const std::string& id, rtc::scoped_refptr<RtcConn> c) {
     std::lock_guard<std::mutex> lock(rtcconn_map_lock_);
-    rtcconn_map_[id] = c;
+	Info("add RtcConnection(id:%s)", id.c_str());
+	rtcconn_map_.insert(std::pair<std::string, rtc::scoped_refptr<RtcConn>>(id, c));
+    //rtcconn_map_[id] = c;
 }
 
 rtc::scoped_refptr<RtcConn> Signaling::findRtcConn(const std::string& id) {
@@ -315,6 +365,7 @@ void Signaling::subscribe(const std::string& streamid) {
 }
 
 void Signaling::handleSubRes(const Json::Value& m) {
+	Info("handle subres");
     int code = m["code"].asInt();
     if (code) {
         return;
@@ -387,7 +438,84 @@ void Signaling::onConnection() {
 }
 
 void Signaling::connectRun(const std::string& url) {
+	stats_thread_exit_flag_.store(false);
+	stats_thread_ = std::thread(std::bind(&Signaling::getStatistics, this));
+	notify_thread_exit_flag_.store(false);
+	notify_thread_ = std::thread(std::bind(&Signaling::notifyStats, this));
     h_.connect(url);
     h_.run();
 }
 
+// TODO
+void Signaling::getStatistics() {
+	while(stats_thread_exit_flag_.load() != true) {
+		std::cout << "get statistics =====================" << std::endl;
+		if (rtcconn_map_.size() == 0) {
+			// TODO
+			std::cout << "no available rtccon!!" << std::endl;
+			break;
+		}
+		auto it = rtcconn_map_.begin();
+		while (it != rtcconn_map_.end()) {
+			it->second->wrtcconn_->GetStats(it->second.get());
+			++it;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	}
+}
+
+void Signaling::onStatsUpdate(std::chrono::duration<uint64_t, std::milli> duration) {
+	using namespace std::chrono;
+	std::lock_guard<std::mutex> lock_map(rtcconn_map_lock_);
+	if (rtcconn_map_.size() == 0) {
+		// TODO
+		std::cout << "no valid rtc connection!!=================" << std::endl;
+		return;
+	}
+	auto it = rtcconn_map_.begin();
+	uint64_t input = 0;
+	uint64_t output = 0;
+	int32_t res = 0;
+	while (it != rtcconn_map_.end()) {
+		input += it->second->stats_report_.bytesReceived_;
+		output += it->second->stats_report_.bytesSent_;
+		res += (it->second->stats_report_.width_ * it->second->stats_report_.height_);
+		++it;
+	}
+	auto now = high_resolution_clock::now();
+	auto now_s = duration_cast<seconds>(now.time_since_epoch()).count();
+	std::lock_guard<std::mutex> lock_json_stats(stats_json_lock_);	
+	statsJson_["roomId"] = tokenjson_["roomId"];
+	statsJson_["publishUrl"] = tokenjson_["publishUrl"];
+	statsJson_["jobId"] = tokenjson_["jobId"];
+	statsJson_["app"] = tokenjson_["app"];
+	statsJson_["uid"] = tokenjson_["uid"];
+	statsJson_["time"] = now_s;
+	statsJson_["duration"] = duration_cast<milliseconds>(duration).count();
+	statsJson_["inputBytes"] = Json::UInt64(input);
+	statsJson_["outputBytes"] = Json::UInt64(output);
+	statsJson_["resolution"] = Json::Int(res);
+}
+
+void Signaling::notifyStats()
+{
+	auto httpcli = std::make_unique<CurlWrapper>();
+	httpcli->CurlEasySetopt<int>(CURLOPT_TIMEOUT, 5);
+	httpcli->CurlEasySetopt<const char*>(CURLOPT_URL, posturl_.c_str());
+	auto slist = httpcli->CurlSlistAppend("Content-Type:application/json;charset=UTF-8");	
+	httpcli->CurlEasySetopt<struct curl_slist*>(CURLOPT_HTTPHEADER, slist);
+	while(notify_thread_exit_flag_.load() != true) {
+		auto content = rtc::JsonValueToString(statsJson_);
+		//if (statsJson_["uid"].asString().size() == 0) {
+			// TODO
+			//std::cout << "no valid content in jsonstats" << std::endl;
+			//std::this_thread::sleep_for(std::chrono::milliseconds(5000)); continue;
+		//}
+		httpcli->CurlEasySetopt<const char*>(CURLOPT_POSTFIELDS, content.c_str());
+		auto res = httpcli->CurlEasyPerform();
+		if (res != CURLE_OK) {
+			std::cout << "curl failed !!! res = " << res << std::endl;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+	}
+}
