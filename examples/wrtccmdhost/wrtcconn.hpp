@@ -43,6 +43,11 @@ public:
         webrtc::SessionDescriptionInterface* desc,
         rtc::scoped_refptr<WRTCConn::SetDescObserver> observer
     );
+    void SetRemoteDescCreateAnswer(
+        webrtc::PeerConnectionInterface::RTCOfferAnswerOptions answeropt,
+        webrtc::SessionDescriptionInterface* desc,
+        rtc::scoped_refptr<WRTCConn::CreateDescObserver> observer
+    );
     bool AddIceCandidate(webrtc::IceCandidateInterface* candidate);
 
 private:

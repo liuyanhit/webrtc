@@ -233,6 +233,34 @@ Input::Input(IN const std::string& _name)
         sampleBuffer_.resize(0);
 }
 
+class InputSinkObserver: public SinkObserver {
+public:
+        InputSinkObserver(Input *input) : input_(input) {}
+
+        void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
+                // format video/audio data
+                if (frame->Stream() == STREAM_VIDEO) {
+                        input_->SetVideo(frame);
+                } else if (frame->Stream() == STREAM_AUDIO) {
+                        input_->SetAudio(frame);
+                }
+        }
+
+private:
+        Input *input_;
+};
+
+void Input::Start(IN SinkAddRemover *stream) {
+        stream_ = stream;
+        
+        sink_ = new InputSinkObserver(this);
+        stream_->AddSink(sink_);
+
+        onStop_ = [this]() {
+                stream_->RemoveSink(sink_->Id());
+        };
+}
+
 // start thread => receiver loop => decoder loop
 void Input::Start(IN const std::string& _url)
 {
@@ -278,14 +306,18 @@ void Input::Start(IN const std::string& _url)
         };
 
         receiver_ = std::thread(recv);
+
+        onStop_ = [this]() {
+                bReceiverExit_.store(true);
+                if (receiver_.joinable()) {
+                        receiver_.join();
+                }
+        };
 }
 
 void Input::Stop()
 {
-        bReceiverExit_.store(true);
-        if (receiver_.joinable()) {
-                receiver_.join();
-        }
+        onStop_();
 }
 
 void Input::SetVideo(const std::shared_ptr<MediaFrame>& _pFrame)

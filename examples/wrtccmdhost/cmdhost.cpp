@@ -5,18 +5,41 @@ const std::string kId = "id";
 const std::string kCode = "code";
 const std::string kError = "error";
 const std::string kSdp = "sdp";
+const std::string kCandidate = "candidate";
 const int errConnNotFound = 10002;
 const std::string errConnNotFoundString = "conn not found";
 const int errInvalidParams = 10003;
 const std::string errInvalidParamsString = "invalid params";
 
+const std::string kSdpMLineIndex = "sdpMLineIndex";
+const std::string kSdpMid = "sdpMid";
+
 const std::string mtEcho = "echo";
 const std::string mtNewConn = "new-conn";
 const std::string mtCreateOfferSetLocalDesc = "create-offer-set-local-desc";
 const std::string mtSetRemoteDesc = "set-remote-desc";
+const std::string mtSetRemoteDescCreateAnswer = "set-remote-desc-create-answer";
 const std::string mtOnIceCandidate = "on-ice-candidate";
-const std::string mtOnIceStateChange = "on-ice-state-change";
+const std::string mtOnIceConnectionChange = "on-ice-conn-state-change";
 const std::string mtAddIceCandidate = "add-ice-candidate";
+
+static std::string jsonAsString(const Json::Value& v) {
+    if (!v.isString()) {
+        return "";
+    }
+    return v.asString();
+}
+
+static void parseOfferAnswerOpt(const Json::Value& v, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions& opt) {
+    auto audio = v["audio"];
+    if (audio.isBool() && audio.asBool()) {
+        opt.offer_to_receive_audio = 1;
+    }
+    auto video = v["video"];
+    if (video.isBool() && video.asBool()) {
+        opt.offer_to_receive_video = 1;
+    }    
+}
 
 void CmdHost::Run() {
     wrtc_signal_thread_.Start();
@@ -25,6 +48,8 @@ void CmdHost::Run() {
         &wrtc_work_thread_, &wrtc_work_thread_, &wrtc_signal_thread_, 
         nullptr, nullptr, nullptr
     );
+    Info("wrtc_work_thread_ %p", &wrtc_work_thread_);
+    Info("wrtc_signal_thread_ %p", &wrtc_signal_thread_);
     msgpump_->Run();
 }
 
@@ -60,13 +85,17 @@ public:
         std::string sdp;
         candidate->ToString(&sdp);
         Json::Value res;
-        res[kSdp] = sdp;
+        Json::Value c;
+        c[kSdpMid] = candidate->sdp_mid();
+        c[kSdpMLineIndex] = std::to_string(candidate->sdp_mline_index());
+        c[kCandidate] = sdp;
+        res[kCandidate] = rtc::JsonValueToString(c);
         writeMessage(mtOnIceCandidate, res);
     }
     void OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state) {
         Json::Value res;
         res["state"] = iceStateToString(new_state);
-        writeMessage(mtOnIceStateChange, res);
+        writeMessage(mtOnIceConnectionChange, res);
     }
     void writeMessage(const std::string& type, Json::Value& res) {
         res[kId] = id_;
@@ -129,13 +158,13 @@ WRTCConn* CmdHost::checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneO
     return conn;
 }
 
-class CreateOfferSetLocalDescObserver: public WRTCConn::CreateDescObserver {
+class CreateDescObserver: public WRTCConn::CreateDescObserver {
 public:
-    CreateOfferSetLocalDescObserver(rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) : observer_(observer) {}
+    CreateDescObserver(rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) : observer_(observer) {}
 
     void OnSuccess(const std::string& desc) {
         Json::Value res;
-        res["sdp"] = desc;
+        res[kSdp] = desc;
         observer_->OnSuccess(res);
     }
     void OnFailure(const std::string& error) {
@@ -152,16 +181,8 @@ void CmdHost::handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_
     }
 
     webrtc::PeerConnectionInterface::RTCOfferAnswerOptions offeropt = {};
-    auto audio = req["audio"];
-    if (audio.isBool() && audio.asBool()) {
-        offeropt.offer_to_receive_audio = 1;
-    }
-    auto video = req["video"];
-    if (video.isBool() && video.asBool()) {
-        offeropt.offer_to_receive_video = 1;
-    }
-
-    conn->CreateOfferSetLocalDesc(offeropt, new rtc::RefCountedObject<CreateOfferSetLocalDescObserver>(observer));
+    parseOfferAnswerOpt(req, offeropt);
+    conn->CreateOfferSetLocalDesc(offeropt, new rtc::RefCountedObject<CreateDescObserver>(observer));
 }
 
 class SetDescObserver: public WRTCConn::SetDescObserver {
@@ -179,20 +200,13 @@ public:
     rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer_;
 };
 
-static std::string jsonAsString(const Json::Value& v) {
-    if (!v.isString()) {
-        return "";
-    }
-    return v.asString();
-}
-
 void CmdHost::handleSetRemoteDesc(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
     auto conn = checkConn(req, observer);
     if (conn == NULL) {
         return;
     }
 
-    std::string sdp = jsonAsString(req["sdp"]);
+    std::string sdp = jsonAsString(req[kSdp]);
     webrtc::SdpParseError err;
     auto desc = CreateSessionDescription("answer", sdp, &err); 
     if (!desc) {
@@ -203,13 +217,32 @@ void CmdHost::handleSetRemoteDesc(const Json::Value& req, rtc::scoped_refptr<Cmd
     conn->SetRemoteDesc(desc, new rtc::RefCountedObject<SetDescObserver>(observer));
 }
 
+void CmdHost::handleSetRemoteDescCreateAnswer(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
+    auto conn = checkConn(req, observer);
+    if (conn == NULL) {
+        return;
+    }
+
+    std::string sdp = jsonAsString(req[kSdp]);
+    webrtc::SdpParseError err;
+    auto desc = CreateSessionDescription("offer", sdp, &err); 
+    if (!desc) {
+        observer->OnFailure(errInvalidParams, err.description);
+        return;
+    }
+
+    webrtc::PeerConnectionInterface::RTCOfferAnswerOptions answeropt = {};
+    parseOfferAnswerOpt(req, answeropt);
+    conn->SetRemoteDescCreateAnswer(answeropt, desc, new rtc::RefCountedObject<CreateDescObserver>(observer));
+}
+
 void CmdHost::handleAddIceCandidate(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
     auto conn = checkConn(req, observer);
     if (conn == NULL) {
         return;
     }
 
-    std::string cs = jsonAsString(req["candidate"]);
+    std::string cs = jsonAsString(req[kCandidate]);
     Json::Reader jr;
     Json::Value c;
     if (!jr.parse(cs.c_str(), cs.c_str()+cs.size(), c, false)) {
@@ -217,9 +250,9 @@ void CmdHost::handleAddIceCandidate(const Json::Value& req, rtc::scoped_refptr<C
         return;
     }
 
-    std::string sdp_mid = jsonAsString(c["sdpMid"]);
-    int sdp_mlineindex = atoi(jsonAsString(c["sdpMLineIndex"]).c_str());
-    std::string sdp = jsonAsString(c["candidate"]);
+    std::string sdp_mid = jsonAsString(c[kSdpMid]);
+    int sdp_mlineindex = atoi(jsonAsString(c[kSdpMLineIndex]).c_str());
+    std::string sdp = jsonAsString(c[kCandidate]);
 
     webrtc::SdpParseError err;
     auto candidate = webrtc::CreateIceCandidate(sdp_mid, sdp_mlineindex, sdp, &err);
@@ -267,6 +300,8 @@ void CmdHost::handleReq(rtc::scoped_refptr<MsgPump::Request> req) {
         handleCreateOfferSetLocalDesc(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtSetRemoteDesc) {
         handleSetRemoteDesc(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtSetRemoteDescCreateAnswer) {
+        handleSetRemoteDescCreateAnswer(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtAddIceCandidate) {
         handleAddIceCandidate(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     }

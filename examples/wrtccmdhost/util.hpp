@@ -9,6 +9,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <random>
 
 //
 // singleton
@@ -291,6 +292,16 @@ namespace yuv {
                         memcpy(dst + i*dstlinesize, src + i*srclinesize, minlinesize);
                 }
         }
+}
+
+static inline std::string newReqId() {
+    std::random_device rd;
+    const char *dig = "0123456789abcdef";
+    char buf[12];
+    for (int i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = dig[rd()%16];
+    }
+    return std::string(buf, sizeof(buf));
 }
 
 #endif

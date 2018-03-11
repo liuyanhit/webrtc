@@ -1,5 +1,6 @@
 #include "msgpump.hpp"
 #include "wrtcconn.hpp"
+#include "stream.hpp"
 
 #include "muxer.hpp"
 #include "common.hpp"
@@ -37,6 +38,7 @@ public:
 
     void handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleSetRemoteDesc(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
+    void handleSetRemoteDescCreateAnswer(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
     void handleAddIceCandidate(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
     void handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleReq(rtc::scoped_refptr<MsgPump::Request> req);

@@ -356,7 +356,7 @@ void AvMuxer::FeedOutputs(IN std::shared_ptr<MediaFrame>& _pFrame)
         outputs_.Foreach([&](std::shared_ptr<Output>& _pOutput) {
                         bool ok = _pOutput->Push(_pFrame);
                         if (!ok) {
-                                Info("FeedOutputs PushFailed isaudio %d", _pFrame->Stream() == StreamType::STREAM_AUDIO);
+                                Verbose("FeedOutputs PushFailed isaudio %d", _pFrame->Stream() == StreamType::STREAM_AUDIO);
                         }
                 });
 }

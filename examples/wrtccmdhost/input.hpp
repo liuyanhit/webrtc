@@ -2,6 +2,7 @@
 #define __INPUT_HPP__
 
 #include "common.hpp"
+#include "stream.hpp"
 
 namespace muxer
 {
@@ -45,6 +46,7 @@ namespace muxer
                 ~Input();
                 std::string Name();
 
+                void Start(IN SinkAddRemover *stream);
                 void Start(IN const std::string& url);
                 void Stop();
 
@@ -52,7 +54,7 @@ namespace muxer
                 bool GetVideo(OUT std::shared_ptr<MediaFrame>& pFrame, OUT size_t& nQlen);
                 bool GetAudio(OUT std::shared_ptr<MediaFrame>& pFrame, OUT size_t& nQlen);
 
-        private:
+        public:
                 // push one video/audio
                 void SetAudio(const std::shared_ptr<MediaFrame>& pFrame);
                 void SetVideo(const std::shared_ptr<MediaFrame>& pFrame);
@@ -72,6 +74,10 @@ namespace muxer
                 std::mutex sampleBufferLck_;
 
                 std::shared_ptr<VideoRescaler> pRescaler_ = nullptr;
+
+                SinkAddRemover *stream_;
+                SinkObserver *sink_;
+                std::function<void ()> onStop_;
         };
 }
 
