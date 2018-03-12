@@ -31,6 +31,9 @@ public:
     std::mutex conn_map_lock_;
     std::map<std::string, WRTCConn*> conn_map_;
 
+    std::mutex streams_map_lock_;
+    std::map<std::string, Stream*> streams_map_;
+
     MsgPump* msgpump_;
 
     void writeMessage(const std::string& type, const Json::Value& msg);

@@ -8,6 +8,7 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/json.h"
 #include "rtc_base/refcount.h"
+#include "stream.hpp"
 
 class WRTCConn
 {
@@ -16,7 +17,9 @@ public:
     public:
         virtual void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) = 0;
         virtual void OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state) = 0;
-    protected:
+        virtual void OnAddStream(const std::string& id, Stream* stream) = 0;
+        virtual void OnRemoveStream(const std::string& id, const std::string& stream_id) = 0;
+   protected:
         ~ConnObserver() {}
     };
 

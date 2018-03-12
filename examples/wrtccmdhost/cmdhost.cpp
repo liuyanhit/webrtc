@@ -1,4 +1,5 @@
 #include "cmdhost.hpp"
+#include "stream.hpp"
 #include <stdlib.h>
 
 const std::string kId = "id";
@@ -22,6 +23,8 @@ const std::string mtSetRemoteDescCreateAnswer = "set-remote-desc-create-answer";
 const std::string mtOnIceCandidate = "on-ice-candidate";
 const std::string mtOnIceConnectionChange = "on-ice-conn-state-change";
 const std::string mtAddIceCandidate = "add-ice-candidate";
+const std::string mtOnConnAddStream = "on-conn-add-stream";
+const std::string mtOnConnRemoveStream = "on-conn-remove-stream";
 
 static std::string jsonAsString(const Json::Value& v) {
     if (!v.isString()) {
@@ -97,6 +100,22 @@ public:
         res["state"] = iceStateToString(new_state);
         writeMessage(mtOnIceConnectionChange, res);
     }
+    void OnAddStream(const std::string& id, Stream *stream) {
+        {
+            std::lock_guard<std::mutex> lock(h_->streams_map_lock_);
+            h_->streams_map_[stream->Id()] = stream;
+        }
+        Json::Value res;
+        res["id"] = id;
+        res["stream_id"] = stream->Id();
+        writeMessage(mtOnConnAddStream, res);
+    }
+    void OnRemoveStream(const std::string& id, const std::string& stream_id) {
+        Json::Value res;
+        res["id"] = id;
+        res["stream_id"] = stream_id;
+        writeMessage(mtOnConnRemoveStream, res);
+    }
     void writeMessage(const std::string& type, Json::Value& res) {
         res[kId] = id_;
         h_->writeMessage(type, res);
@@ -135,7 +154,11 @@ void CmdHost::handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneOb
     auto conn_observer = new ConnObserver(this);
     auto conn = new WRTCConn(pc_factory_, rtcconf, conn_observer);
     conn_observer->id_ = conn->ID();
-    conn_map_[conn->ID()] = conn;
+    
+    {
+        std::lock_guard<std::mutex> lock(conn_map_lock_);
+        conn_map_[conn->ID()] = conn;
+    }
 
     Json::Value res;
     res[kId] = conn->ID();
@@ -149,7 +172,11 @@ WRTCConn* CmdHost::checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneO
         return NULL;
     }
 
-    auto conn = conn_map_[id.asString()];
+    WRTCConn *conn = NULL;
+    {
+        std::lock_guard<std::mutex> lock(conn_map_lock_);
+        conn = conn_map_[id.asString()];
+    }
     if (conn == NULL) {
         observer->OnFailure(errConnNotFound, errConnNotFoundString);
         return NULL;    

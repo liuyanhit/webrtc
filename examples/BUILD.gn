@@ -38,7 +38,7 @@ rtc_executable("wrtccmdhost") {
     "wrtccmdhost/packet.hpp",
     "wrtccmdhost/util.hpp",
     "wrtccmdhost/stream.hpp",
-    "wrtccmdhost/stream.hpp",
+    "wrtccmdhost/stream.cpp",
   ]
   cflags = [ ]
   defines = [ ]

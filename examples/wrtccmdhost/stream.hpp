@@ -5,10 +5,6 @@
 #include "rtc_base/json.h"
 
 /*
-rtc-on-add-stream={"id":xxx, "stream_id":"xxx"}
-rtc-on-remove-stream={"id":xxx, "stream_id":"xxx"}
-new-stream={ "canvas": {...} } res={"id":"xxx"}
-rtc-add-stream={id:"", stream_id:"xx"}
 libmuxer-new={"output_opt":{...} } res={"id":"xxx", "output_stream_id":"xxx"}
 libmuxer-set-output-opt={...}
 libmuxer-add-input={"id":"xx", "stream_id":"xx", "opt":{...}}
@@ -64,8 +60,6 @@ public:
     Stream *FindStream(const std::string& id);
 
 private:
-    std::map<std::string, Stream*> streams_map_;
-    std::mutex streams_map_lock_;
 };
 
 #endif
