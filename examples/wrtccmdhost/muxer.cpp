@@ -155,6 +155,14 @@ int AvMuxer::AddInput(IN const std::string& _name, IN const std::string& _url)
         return 0;
 }
 
+int AvMuxer::AddInput(IN const std::string& _name, IN SinkAddRemover *stream)
+{
+        auto r = std::make_shared<Input>(_name);
+        r->Start(stream);
+        inputs_.Push(std::move(r));
+        return 0;
+}
+
 int AvMuxer::AddInput(IN const std::string& _name, IN const std::string& _url, IN const Option& _opt)
 {
         auto r = std::make_shared<Input>(_name);

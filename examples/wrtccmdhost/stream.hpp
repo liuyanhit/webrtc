@@ -13,9 +13,6 @@ libmuxer-remove-input={"id":"xxx", "stream_id":"xx"}
 stream-add-sink={"id":"xxx", "type":"ffmpeg/libmuxer_rtmp", "url":"rtmp://" or "xxx.flv"} res={"id":"xxx"}
 stream-remove-sink={"id":"xxx", "sink_id":"xxx"} res={}
 stream-stat={"id":"xxx"} res={"w":240, "h":480, "avg_fps":23, "sample_rate":44000, "sink":[...]}
-
-class LibMuxerRtmpSink: LibMuxerSinkObserver {
-};
 */
 
 class SinkObserver {

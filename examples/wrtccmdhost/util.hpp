@@ -11,6 +11,8 @@
 #include <condition_variable>
 #include <random>
 
+#include "rtc_base/json.h"
+
 //
 // singleton
 //
@@ -302,6 +304,20 @@ static inline std::string newReqId() {
         buf[i] = dig[rd()%16];
     }
     return std::string(buf, sizeof(buf));
+}
+
+static inline std::string jsonAsString(const Json::Value& v) {
+    if (!v.isString()) {
+        return "";
+    }
+    return v.asString();
+}
+
+static inline int jsonAsInt(const Json::Value& v) {
+    if (!v.isInt()) {
+        return 0;
+    }
+    return v.asInt();
 }
 
 #endif

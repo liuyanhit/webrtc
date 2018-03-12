@@ -43,6 +43,7 @@ namespace muxer
                 int DelOutputOption(IN const std::string& name, IN const std::string& key);
                 int RemoveOutput(IN const std::string& name);
 
+                int AddInput(IN const std::string& name, IN SinkAddRemover *stream);
                 int AddInput(IN const std::string& name, IN const std::string& url);
                 int AddInput(IN const std::string& name, IN const std::string& url, IN const Option& opt);
                 int ModInputOption(IN const std::string& name, IN const std::string& key, IN const std::string& val = "");

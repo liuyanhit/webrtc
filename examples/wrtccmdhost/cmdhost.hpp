@@ -34,16 +34,23 @@ public:
     std::mutex streams_map_lock_;
     std::map<std::string, Stream*> streams_map_;
 
+    std::mutex muxers_map_lock_;
+    std::map<std::string, muxer::AvMuxer*> muxers_map_;
+
     MsgPump* msgpump_;
 
     void writeMessage(const std::string& type, const Json::Value& msg);
     WRTCConn *checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    muxer::AvMuxer *checkLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
 
     void handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleSetRemoteDesc(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
     void handleSetRemoteDescCreateAnswer(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
     void handleAddIceCandidate(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer);
     void handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleLibmuxerAddInput(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleReq(rtc::scoped_refptr<MsgPump::Request> req);
     void handleMsg(const std::string& type, const Json::Value& body);
 };
