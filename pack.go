@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-var mergeworkerpath = "./out/Default/mergeworker"
 var ldlinuxpath = "/lib64/ld-linux-x86-64.so.2"
 
 func otoolL(lib string) (paths []string, err error) {
@@ -59,23 +58,38 @@ func installNameTool(lib string, change [][]string) error {
 	return nil
 }
 
-func packlibDarwin() error {
-	visited := map[string]bool{}
-	var dfs func(k string) error
+type CopyEntry struct {
+	Realpath string
+	IsBin    bool
+}
 
+func packlibDarwin(copy []CopyEntry) error {
+	visited := map[string]bool{}
+	isbin := map[string]bool{}
+
+	var dfs func(k string) error
 	dfs = func(k string) error {
 		if visited[k] {
 			return nil
 		}
 		visited[k] = true
-		//fmt.Println("visit", k)
 		paths, err := otoolL(k)
 		if err != nil {
 			return err
 		}
 		for _, p := range paths {
 			if strings.HasPrefix(p, "@") {
-				continue
+				const rpath = "@rpath/"
+				if strings.HasPrefix(p, rpath) {
+					lp := locate(strings.TrimPrefix(p, rpath))
+					if lp != "" {
+						p = lp
+					} else {
+						continue
+					}
+				} else {
+					continue
+				}
 			}
 			if strings.HasPrefix(p, "/usr/lib") {
 				continue
@@ -90,8 +104,13 @@ func packlibDarwin() error {
 		return nil
 	}
 
-	if err := dfs(mergeworkerpath); err != nil {
-		return err
+	for _, f := range copy {
+		if f.IsBin {
+			isbin[f.Realpath] = true
+		}
+		if err := dfs(f.Realpath); err != nil {
+			return err
+		}
 	}
 
 	change := [][]string{}
@@ -105,7 +124,7 @@ func packlibDarwin() error {
 
 	for p := range visited {
 		dstdir := "lib"
-		if path.Base(p) == "mergeworker" {
+		if isbin[p] {
 			dstdir = "bin"
 		}
 		fname := path.Join(dstdir, path.Base(p))
@@ -120,15 +139,30 @@ func packlibDarwin() error {
 		if err := installNameTool(fname, change); err != nil {
 			return fmt.Errorf("change %s failed: %s", fname, err)
 		}
-		fmt.Println(fname)
+		fmt.Println("copy", fname)
 	}
 
 	return nil
 }
 
+var libsearchpath []string
+
+func locate(name string) (out string) {
+	for _, root := range libsearchpath {
+		p := path.Join(root, name)
+		_, serr := os.Stat(p)
+		if serr == nil {
+			out = p
+			return
+		}
+	}
+	return
+}
+
 type Entry struct {
 	Name     string
 	Realpath string
+	IsBin    bool
 }
 
 func ldd(lib string) (paths []Entry, err error) {
@@ -161,14 +195,20 @@ func ldd(lib string) (paths []Entry, err error) {
 		if name == ldlinuxpath {
 			continue
 		}
-		realpath := f[2]
+		var realpath string
+		if strings.HasPrefix(f[2], "/") {
+			realpath = f[2]
+		} else {
+			realpath = locate(name)
+		}
 		paths = append(paths, Entry{Name: name, Realpath: realpath})
 	}
 	return
 }
 
-func packlibLinux() error {
+func packlibLinux(copy []CopyEntry) error {
 	visited := map[string]Entry{}
+
 	var dfs func(e Entry) error
 	dfs = func(e Entry) (err error) {
 		if _, ok := visited[e.Name]; ok {
@@ -186,14 +226,18 @@ func packlibLinux() error {
 		}
 		return
 	}
-	dfs(Entry{Name: "mergeworker", Realpath: mergeworkerpath})
+
+	for _, f := range copy {
+		dfs(Entry{Name: path.Base(f.Realpath), Realpath: f.Realpath, IsBin: f.IsBin})
+	}
+
 	for _, e := range visited {
 		if e.Realpath == "" {
 			continue
 		}
 		src := e.Realpath
 		dstdir := "lib"
-		if e.Name == "mergeworker" {
+		if e.IsBin {
 			dstdir = "bin"
 		}
 		dst := path.Join(dstdir, e.Name)
@@ -204,34 +248,36 @@ func packlibLinux() error {
 		}
 		fmt.Println(src, dst)
 	}
-	c := exec.Command("cp", "-f", ldlinuxpath, "lib/ld-linux.so")
+
+	c := exec.Command("cp", "-f", ldlinuxpath, path.Join("lib", "ld-linux.so"))
 	if err := c.Run(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func runPack() error {
+func runPack(copy []CopyEntry) error {
 	os.RemoveAll("lib")
 	os.RemoveAll("bin")
 	os.Mkdir("lib", 0744)
 	os.Mkdir("bin", 0744)
 	switch runtime.GOOS {
 	case "darwin":
-		if err := packlibDarwin(); err != nil {
+		if err := packlibDarwin(copy); err != nil {
 			return err
 		}
 	case "linux":
-		if err := packlibLinux(); err != nil {
+		if err := packlibLinux(copy); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runUpload() error {
+func runUpload(name string) error {
 	var c *exec.Cmd
-	uploadname := fmt.Sprintf("mergeworker-libdeps-%s.tar.bz2", runtime.GOOS)
+	uploadname := fmt.Sprintf("%s-%s.tar.bz2", name, runtime.GOOS)
 	tarname := fmt.Sprintf("/tmp/%d", time.Now().UnixNano())
 	defer os.Remove(tarname)
 
@@ -258,28 +304,43 @@ func runcmd(path string, args ...string) error {
 }
 
 func run() error {
+	upload := flag.Bool("u", false, "upload")
+	search := flag.String("s", "", "lib search path")
+	bin := flag.String("bin", "", "bin files")
+	lib := flag.String("lib", "", "lib files")
+	name := flag.String("n", "", "name")
 	flag.Parse()
-	args := flag.Args()
 
-	if len(args) == 0 {
-		if err := runPack(); err != nil {
-			return err
-		}
-		if err := runUpload(); err != nil {
-			return err
-		}
-		return nil
+	if *name == "" {
+		return fmt.Errorf("name is empty")
 	}
 
-	op := args[0]
+	if *search != "" {
+		libsearchpath = strings.Split(*search, ";")
+	}
 
-	switch op {
-	case "pack":
-		if err := runPack(); err != nil {
-			return err
+	copy := []CopyEntry{}
+	if *bin != "" {
+		for _, f := range strings.Split(*bin, ";") {
+			copy = append(copy, CopyEntry{IsBin: true, Realpath: f})
 		}
-	case "upload":
-		if err := runUpload(); err != nil {
+	}
+	if *lib != "" {
+		for _, f := range strings.Split(*lib, ";") {
+			copy = append(copy, CopyEntry{Realpath: f})
+		}
+	}
+
+	if len(copy) == 0 {
+		return fmt.Errorf("specifiy some lib or bin files")
+	}
+
+	if err := runPack(copy); err != nil {
+		return err
+	}
+
+	if *upload {
+		if err := runUpload(*name); err != nil {
 			return err
 		}
 	}
