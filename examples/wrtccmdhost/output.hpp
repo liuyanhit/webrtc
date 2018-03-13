@@ -201,6 +201,14 @@ namespace muxer
                 std::shared_ptr<H264Nalu> pPps_ = nullptr;
         };
 
+        class RtmpSink: public SinkObserver {
+        public:
+                RtmpSink(const std::string& url);
+
+        private:
+                RtmpSender *rtmp_sender_;
+        };
+
         class Output : public OptionMap
         {
         public:
