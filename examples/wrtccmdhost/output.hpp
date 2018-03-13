@@ -2,6 +2,7 @@
 #define __OUTPUT_HPP__
 
 #include "common.hpp"
+#include "stream.hpp"
 
 namespace muxer
 {
@@ -207,13 +208,17 @@ namespace muxer
                 ~Output();
                 std::string Name();
                 void Start(IN const std::string& url);
+                void Start(IN FrameSender* stream);
                 void Stop();
                 bool Push(IN std::shared_ptr<MediaFrame>& pFrame);
         private:
+                FrameSender* stream_;
                 std::string name_;
                 std::thread sender_;
                 std::atomic<bool> bSenderExit_;
                 SharedQueue<std::shared_ptr<MediaFrame>> muxedQ_;
+                std::function<void ()> onStop_;
+                std::function<bool (IN std::shared_ptr<MediaFrame>& pFrame)> onFrame_;
         };
 }
 

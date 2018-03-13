@@ -16,11 +16,45 @@ public:
             Info("AddAudioSink");
             track->AddSink(this);
         }
-        Info("AddSinkDone");
     }
 
-    void OnFrame(const webrtc::VideoFrame& video_frame) {
-        Info("OnFrameVideo");
+    void OnFrame(const webrtc::VideoFrame& rtcframe) {
+        //Info("OnFrameVideo");
+
+        std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
+        frame->Stream(muxer::STREAM_VIDEO);
+        frame->Codec(muxer::CODEC_H264);
+        frame->AvFrame()->format = AV_PIX_FMT_YUV420P;
+        frame->AvFrame()->height = rtcframe.height();
+        frame->AvFrame()->width = rtcframe.width();
+        av_frame_get_buffer(frame->AvFrame(), 32);
+
+        auto rtcfb = rtcframe.video_frame_buffer();
+        auto i420 = rtcfb->ToI420();
+
+        const uint8_t* rtcdata[3] = {
+            i420->DataY(),
+            i420->DataU(),
+            i420->DataV(),
+        };
+        int rtclinesize[3] = {
+            i420->StrideY(),
+            i420->StrideU(),
+            i420->StrideV(),
+        };
+        int height[3] = {
+            rtcframe.height(),
+            i420->ChromaHeight(),
+            i420->ChromaHeight(),
+        };
+
+        for (int i = 0; i < 3; i++) {
+            yuv::CopyLine(frame->AvFrame()->data[i], frame->AvFrame()->linesize[i], 
+                    rtcdata[i], rtclinesize[i], height[i]
+            );
+        }
+
+        SendFrame(frame);
     }
 
     void OnData(const void* audio_data,
@@ -29,7 +63,22 @@ public:
         size_t number_of_channels,
         size_t number_of_frames) 
     {
-        Info("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
+        //Info("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
+
+        auto frame = std::make_shared<muxer::MediaFrame>();
+        frame->Stream(muxer::STREAM_AUDIO);
+        frame->Codec(muxer::CODEC_AAC);
+        frame->AvFrame()->format = AV_SAMPLE_FMT_S16;
+        frame->AvFrame()->channel_layout = AV_CH_LAYOUT_MONO;
+        frame->AvFrame()->sample_rate = sample_rate;
+        frame->AvFrame()->channels = number_of_channels;
+        frame->AvFrame()->nb_samples = number_of_frames;
+        av_frame_get_buffer(frame->AvFrame(), 0);
+
+        memcpy(frame->AvFrame()->data[0], audio_data, bits_per_sample/8*number_of_frames);
+        SendFrame(frame);
+
+        DebugPCM("/tmp/rtc.orig.s16", audio_data, bits_per_sample/8*number_of_frames);
     }
 };
 

@@ -1427,6 +1427,16 @@ std::string Output::Name()
         return name_;
 }
 
+void Output::Start(IN FrameSender* stream) {
+        stream_ = stream;
+        onFrame_ = [&](IN std::shared_ptr<MediaFrame>& pFrame) {
+                Info("OutputFrame");
+                stream_->SendFrame(pFrame);
+                return true;
+        };
+        onStop_ = [&]() {};
+}
+
 void Output::Start(IN const std::string& _url)
 {
         auto snd = [this, _url] {
@@ -1476,18 +1486,26 @@ void Output::Start(IN const std::string& _url)
         };
 
         sender_ = std::thread(snd);
+
+        onFrame_ = [&](IN std::shared_ptr<MediaFrame>& pFrame) {
+                return muxedQ_.TryPush(pFrame);
+        };
+
+        onStop_ = [&]() {
+                bSenderExit_.store(true);
+                if (sender_.joinable()) {
+                        sender_.join();
+                }
+        };
 }
 
 void Output::Stop()
 {
-        bSenderExit_.store(true);
-        if (sender_.joinable()) {
-                sender_.join();
-        }
+        onStop_();
 }
 
 bool Output::Push(IN std::shared_ptr<MediaFrame>& _pFrame)
 {
-        return muxedQ_.TryPush(_pFrame);
+        return onFrame_(_pFrame);
 }
 

@@ -36,7 +36,13 @@ public:
     virtual ~SinkAddRemover() {}
 };
 
-class Stream: public SinkAddRemover {
+class FrameSender {
+public:
+    virtual void SendFrame(const std::shared_ptr<muxer::MediaFrame>& frame) = 0;
+    virtual ~FrameSender() {}
+};
+
+class Stream: public SinkAddRemover, public FrameSender {
 public:
     Stream(const std::string& id) : id_(id), sinks_map_(), sinks_map_lock_() {}
     Stream() : id_(newReqId()), sinks_map_(), sinks_map_lock_() {}
@@ -49,14 +55,6 @@ private:
     std::string id_;
     std::map<std::string, SinkObserver*> sinks_map_;
     std::mutex sinks_map_lock_;
-};
-
-class StreamManager {
-public:
-    void AddStream(const Stream *stream);
-    Stream *FindStream(const std::string& id);
-
-private:
 };
 
 #endif

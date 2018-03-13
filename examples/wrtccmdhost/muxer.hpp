@@ -36,6 +36,7 @@ namespace muxer
                 AvMuxer(IN int nWidth, IN int nHeight);
                 ~AvMuxer();
 
+                int AddOutput(IN const std::string& name, IN FrameSender* stream);
                 int AddOutput(IN const std::string& name, IN const std::string& url);
                 int AddOutput(IN const std::string& name, IN const std::string& url, IN const Option& opt);
                 int ModOutputOption(IN const std::string& name, IN const std::string& key, IN const std::string& val = "");

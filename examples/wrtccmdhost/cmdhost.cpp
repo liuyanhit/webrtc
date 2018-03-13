@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 const std::string kId = "id";
+const std::string kStreamId = "stream_id";
 const std::string kCode = "code";
 const std::string kError = "error";
 const std::string kSdp = "sdp";
@@ -102,14 +103,14 @@ public:
             h_->streams_map_[stream->Id()] = stream;
         }
         Json::Value res;
-        res["id"] = id;
-        res["stream_id"] = stream->Id();
+        res[kId] = id;
+        res[kStreamId] = stream->Id();
         writeMessage(mtOnConnAddStream, res);
     }
     void OnRemoveStream(const std::string& id, const std::string& stream_id) {
         Json::Value res;
-        res["id"] = id;
-        res["stream_id"] = stream_id;
+        res[kId] = id;
+        res[kStreamId] = stream_id;
         writeMessage(mtOnConnRemoveStream, res);
     }
     void writeMessage(const std::string& type, Json::Value& res) {
@@ -314,6 +315,11 @@ muxer::AvMuxer* CmdHost::checkLibmuxer(const Json::Value& req, rtc::scoped_refpt
     return m;
 }
 
+class LibmuxerOutputStream: public Stream {
+public:
+    LibmuxerOutputStream() {}
+};
+
 void CmdHost::handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
     int w = jsonAsInt(req["w"]);
     int h = jsonAsInt(req["h"]);
@@ -323,8 +329,19 @@ void CmdHost::handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdHo
         std::lock_guard<std::mutex> lock(muxers_map_lock_);
         muxers_map_[id] = m;
     }
+
+    auto stream = new LibmuxerOutputStream();
+    {
+        std::lock_guard<std::mutex> lock(streams_map_lock_);
+        streams_map_[stream->Id()] = stream;
+    }
+    m->AddOutput(stream->Id(), stream);
+
+    m->Start();
+
     Json::Value res;
     res[kId] = id;
+    res["output_stream_id"] = stream->Id();
     observer->OnSuccess(res);
 }
 
@@ -358,7 +375,7 @@ void CmdHost::handleLibmuxerAddInput(const Json::Value& req, rtc::scoped_refptr<
     if (m == NULL) {
         return;
     }
-    auto id = jsonAsString(req["stream_id"]);
+    auto id = jsonAsString(req[kStreamId]);
 
     Stream *stream = NULL;
     {
