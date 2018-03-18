@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
 
     Verbose("Started");
 
-    CmdHost cmdhost;
-    cmdhost.Run();
+    CmdHost *h = new CmdHost();
+    h->Run();
 
     return 0;
 }

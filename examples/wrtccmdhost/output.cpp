@@ -850,8 +850,6 @@ inline int ASC_SF_VALUE(int sf)
 
 RtmpSender::RtmpSender()
 {
-        pRtmp_ = RTMP_Alloc();
-        RTMP_Init(pRtmp_);
 }
 
 RtmpSender::~RtmpSender()
@@ -861,13 +859,80 @@ RtmpSender::~RtmpSender()
                 RTMP_Free(pRtmp_);
                 pRtmp_ = nullptr;
         }
+
+        if (pFlvFile_ != nullptr) {
+                fclose(pFlvFile_);
+                pFlvFile_ = nullptr;
+        }
 }
 
-int RtmpSender::Send(IN const std::string& _url, IN const std::shared_ptr<MediaPacket>& _pPacket)
+static int FlvFileWriteHeader(FILE *fp) {
+        static uint8_t hdr[] = {
+                'F','L','V',0x01, 
+                0,
+                0,0,0,9,
+                0,0,0,0,
+        };
+        if (fpwrite(fp, hdr, sizeof(hdr)) < 0) {
+                return -1;
+        }
+        return 0;
+}
+
+static int FlvFileWritePacket(FILE *fp, RTMPPacket *p) {
+        uint8_t hdr[] = {
+                p->m_packetType,
+                (uint8_t)((p->m_nBodySize>>16)&0xff),
+                (uint8_t)((p->m_nBodySize>>8)&0xff),
+                (uint8_t)((p->m_nBodySize>>0)&0xff),
+                (uint8_t)((p->m_nTimeStamp>>16)&0xff),
+                (uint8_t)((p->m_nTimeStamp>>8)&0xff),
+                (uint8_t)((p->m_nTimeStamp>>0)&0xff),
+                (uint8_t)((p->m_nTimeStamp>>24)&0xff),
+                0,0,0,
+        };
+        uint32_t tagsize = p->m_nBodySize+11;
+        uint8_t tail[] = {
+                (uint8_t)((tagsize>>24)&0xff),
+                (uint8_t)((tagsize>>16)&0xff),
+                (uint8_t)((tagsize>>8)&0xff),
+                (uint8_t)((tagsize>>0)&0xff),
+        };
+        if (fpwrite(fp, hdr, sizeof(hdr)) < 0) {
+                return -1;
+        }
+        if (fpwrite(fp, p->m_body, p->m_nBodySize) < 0) {
+                return -1;
+        }
+        if (fpwrite(fp, tail, sizeof(tail)) < 0) {
+                return -1;
+        }
+        return 0;
+}
+
+int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPacket>& _pPacket)
 {
+        if (pRtmp_ == nullptr && pFlvFile_ == nullptr) {
+                if (!strncmp(url.c_str(), "rtmp://", 7)) {
+                        pRtmp_ = RTMP_Alloc();
+                        RTMP_Init(pRtmp_);
+                } else {
+                        Info("flv: create %s", url.c_str());
+                        pFlvFile_ = fopen(url.c_str(), "wb+");
+                        if (pFlvFile_ == nullptr) {
+                                Error("flv: create %s failed", url.c_str());
+                                return -1;
+                        }
+                        if (FlvFileWriteHeader(pFlvFile_) < 0) {
+                                Error("flv: write header failed");
+                                return -1;
+                        }
+                }
+        }
+
         // connect to the server for the first time to send data
-        if (RTMP_IsConnected(pRtmp_) == 0) {
-                url_ = _url;
+        if (pRtmp_ != nullptr && RTMP_IsConnected(pRtmp_) == 0) {
+                url_ = url;
 
                 Info("rtmp: connecting to %s...", url_.c_str());
                 if (RTMP_SetupURL(pRtmp_, const_cast<char*>(url_.c_str())) == 0) {
@@ -894,7 +959,6 @@ int RtmpSender::Send(IN const std::string& _url, IN const std::shared_ptr<MediaP
 
         SendStreamMetaInfo(*_pPacket);
 
-        Info("SendPacket");
         // send RTMP supported data
         int nStatus = 0;
         switch(_pPacket->Codec()) {
@@ -912,7 +976,6 @@ int RtmpSender::Send(IN const std::string& _url, IN const std::shared_ptr<MediaP
                 }
                 return 0; // do nothing
         }
-        Info("SendPacketEnd Status=%d", nStatus);
 
         return nStatus;
 }
@@ -1332,16 +1395,14 @@ int RtmpSender::SendPacketMedium(IN unsigned int _nPacketType, IN const char* _p
 int RtmpSender::SendRawPacket(IN unsigned int _nPacketType, IN int _nHeaderType,
                               IN const char* _pData, IN size_t _nSize, IN size_t _nTimestamp)
 {
-        if (pRtmp_ == nullptr) {
-                return -1;
-        }
-
-        RTMPPacket packet;
+        RTMPPacket packet = {};
         RTMPPacket_Alloc(&packet, _nSize);
         RTMPPacket_Reset(&packet);
 
         packet.m_headerType = _nHeaderType;
-        packet.m_nInfoField2 = pRtmp_->m_stream_id;
+        if (pRtmp_ != nullptr) {
+                packet.m_nInfoField2 = pRtmp_->m_stream_id;
+        }
 
         // choose channel according to packet type
         ssize_t nCalculated; // final timestamp of the pacekt to send
@@ -1379,13 +1440,18 @@ int RtmpSender::SendRawPacket(IN unsigned int _nPacketType, IN int _nHeaderType,
         packet.m_nBodySize = _nSize;
         std::copy(_pData, _pData + _nSize, packet.m_body);
 
+        int r = -1;
         // send to target server
-        int nStatus = RTMP_SendPacket(pRtmp_, &packet, 0);
-        RTMPPacket_Free(&packet);
-        if (nStatus == 0) {
-                return -1;
+        if (pRtmp_ != nullptr) {
+                if (RTMP_SendPacket(pRtmp_, &packet, 0)) {
+                        r = 0;
+                }
+        } else if (pFlvFile_ != nullptr) {
+                r = FlvFileWritePacket(pFlvFile_, &packet);
         }
-        return 0;
+        RTMPPacket_Free(&packet);
+
+        return r;
 }
 
 ssize_t RtmpSender::AccTimestamp(IN const size_t& _nNow, OUT size_t& _nBase, OUT size_t& _nSequence)
