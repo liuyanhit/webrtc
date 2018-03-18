@@ -198,6 +198,7 @@ namespace muxer
                 FILE *pFlvFile_ = nullptr;
                 bool useAnnexbConcatNalus_ = false;
                 bool keepSpsPpsInNalus_ = false;
+                bool dontSendMetadata_ = false;
 
                 // sequence header
                 std::shared_ptr<H264Nalu> pSps_ = nullptr;

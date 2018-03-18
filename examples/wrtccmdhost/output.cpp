@@ -929,6 +929,7 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                         }
                         keepSpsPpsInNalus_ = true;
                         useAnnexbConcatNalus_ = true;
+                        dontSendMetadata_ = true;
                 }
         }
 
@@ -959,7 +960,9 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                 Info("rtmp: connection is established");
         }
 
-        //SendStreamMetaInfo(*_pPacket);
+        if (!dontSendMetadata_) {
+                SendStreamMetaInfo(*_pPacket);
+        }
 
         // send RTMP supported data
         int nStatus = 0;
