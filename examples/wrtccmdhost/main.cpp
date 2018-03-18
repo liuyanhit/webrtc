@@ -2,11 +2,13 @@
 #include "rtc_base/flags.h"
 #include "rtc_base/flags.h"
 #include "rtc_base/logging.h"
+#include "test.hpp"
 #include <signal.h>
 
 unsigned int muxer::global::nLogLevel = 4;
 DEFINE_int(logLevel, 4, "log level");
 DEFINE_int(wrtcLogLevel, 0, "wrtc log level");
+DEFINE_bool(runTests, false, "run tests");
 
 int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
@@ -28,6 +30,11 @@ int main(int argc, char **argv) {
     default: rtcls = rtc::LS_NONE; break;
     }
     rtc::LogMessage::LogToDebug(rtcls);
+
+    if (FLAG_runTests) {
+        Tests::Run();
+        return 0;
+    }
 
     Verbose("Started");
 

@@ -15,6 +15,7 @@ namespace muxer
                 int Encode(IN std::shared_ptr<MediaFrame>& pFrame, IN EncoderHandlerType& callback);
                 void Bitrate(IN int nBitrate);
         private:
+                void Deinit();
                 int Init(IN const std::shared_ptr<MediaFrame>& pFrame);
                 int Preset(IN const std::shared_ptr<MediaFrame>& pFrame);
                 int PresetAac(IN const std::shared_ptr<MediaFrame>& pFrame);

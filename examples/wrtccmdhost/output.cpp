@@ -12,21 +12,40 @@ AvEncoder::AvEncoder()
 
 AvEncoder::~AvEncoder()
 {
-        if (bIsEncoderAvailable_) {
-                avcodec_close(pAvEncoderContext_);
-        }
+        Deinit();
+}
+
+void AvEncoder::Deinit() {
         if (pAvEncoderContext_ != nullptr) {
+                if (bIsEncoderAvailable_) {
+                        avcodec_close(pAvEncoderContext_);
+                }
                 avcodec_free_context(&pAvEncoderContext_);
+                bIsEncoderAvailable_ = false;
+                pAvEncoderContext_ = nullptr;
         }
         if (pSwr_ != nullptr) {
                 swr_free(&pSwr_);
+                pSwr_ = nullptr;
         }
 }
 
 int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
 {
         if (pAvEncoderContext_ != nullptr) {
-                return 0;
+                if (_pFrame->Stream() == STREAM_VIDEO) {
+                        int oldw = pAvEncoderContext_->width;
+                        int oldh = pAvEncoderContext_->height;
+                        int neww = _pFrame->AvFrame()->width;
+                        int newh = _pFrame->AvFrame()->height;
+                        if (oldw == neww && oldh == newh) {
+                                return 0;
+                        }
+                        Deinit();
+                        Info("video resolution change %dx%d -> %dx%d, reinit codec", oldw,oldh,neww,newh);
+                } else {
+                        return 0;
+                }
         }
 
         // find encoder
@@ -35,6 +54,11 @@ int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
         case STREAM_AUDIO: pAvCodec = avcodec_find_encoder_by_name("libfdk_aac"); break;
         case STREAM_VIDEO: pAvCodec = avcodec_find_encoder_by_name("libx264"); break;
         default: return -1;
+        }
+
+        if (pAvCodec == nullptr) {
+                Error("could not find encoder");
+                return -1;
         }
 
         // initiate AVCodecContext
@@ -905,6 +929,9 @@ static int FlvFileWritePacket(FILE *fp, RTMPPacket *p) {
                 return -1;
         }
         if (fpwrite(fp, tail, sizeof(tail)) < 0) {
+                return -1;
+        }
+        if (fflush(fp) != 0) {
                 return -1;
         }
         return 0;
