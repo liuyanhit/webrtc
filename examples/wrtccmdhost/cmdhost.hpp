@@ -50,7 +50,9 @@ public:
     void handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleLibmuxerAddInput(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleLibmuxerRemoveInput(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleReq(rtc::scoped_refptr<MsgPump::Request> req);
     void handleMsg(const std::string& type, const Json::Value& body);
 };

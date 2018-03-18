@@ -77,6 +77,7 @@ namespace muxer
 
                 SinkAddRemover *stream_;
                 SinkObserver *sink_;
+                std::string sink_id_;
                 std::function<void ()> onStop_;
         };
 }

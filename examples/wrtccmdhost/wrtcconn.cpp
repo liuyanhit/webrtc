@@ -3,7 +3,7 @@
 
 class WRTCStream: public Stream, rtc::VideoSinkInterface<webrtc::VideoFrame>, webrtc::AudioTrackSinkInterface {
 public:
-    WRTCStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) : Stream(stream->label()) {
+    WRTCStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
         webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
         webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
         if (!vtracks.empty()) {
@@ -93,7 +93,7 @@ public:
         webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
         Info("OnAddStream thread=%p vtracks=%lu atracks=%lu id=%s", rtc::Thread::Current(), vtracks.size(), atracks.size(), stream->label().c_str());
 
-        conn_observer_->OnAddStream(id_, new WRTCStream(stream));
+        conn_observer_->OnAddStream(id_, stream->label(), new WRTCStream(stream));
     }
     void OnAddTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver, 
             const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>& streams) 

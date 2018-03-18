@@ -1,12 +1,12 @@
 #include "stream.hpp"
 
-bool Stream::AddSink(SinkObserver *sink) {
+bool Stream::AddSink(const std::string& id, SinkObserver *sink) {
     std::lock_guard<std::mutex> lock(sinks_map_lock_);
-    auto it = sinks_map_.find(sink->Id());
+    auto it = sinks_map_.find(id);
     if (it != sinks_map_.end()) {
         return false;
     }
-    sinks_map_[sink->Id()] = sink;
+    sinks_map_[id] = sink;
     sink->OnStart();
     return true;
 }

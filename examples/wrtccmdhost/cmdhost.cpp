@@ -1,5 +1,6 @@
 #include "cmdhost.hpp"
 #include "stream.hpp"
+#include "output.hpp"
 #include <stdlib.h>
 
 const std::string kId = "id";
@@ -29,6 +30,8 @@ const std::string mtOnConnRemoveStream = "on-conn-remove-stream";
 const std::string mtNewLibMuxer = "new-libmuxer";
 const std::string mtLibmuxerAddInput = "libmuxer-add-input";
 const std::string mtLibmuxerSetInputsOpt = "libmuxer-set-inputs-opt";
+const std::string mtLibmuxerRemoveInput = "libmuxer-remove-input";
+const std::string mtStreamAddSink = "stream-add-sink";
 
 static void parseOfferAnswerOpt(const Json::Value& v, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions& opt) {
     auto audio = v["audio"];
@@ -97,14 +100,14 @@ public:
         res["state"] = iceStateToString(new_state);
         writeMessage(mtOnIceConnectionChange, res);
     }
-    void OnAddStream(const std::string& id, Stream *stream) {
+    void OnAddStream(const std::string& id, const std::string& stream_id, Stream *stream) {
         {
             std::lock_guard<std::mutex> lock(h_->streams_map_lock_);
-            h_->streams_map_[stream->Id()] = stream;
+            h_->streams_map_[stream_id] = stream;
         }
         Json::Value res;
         res[kId] = id;
-        res[kStreamId] = stream->Id();
+        res[kStreamId] = stream_id;
         writeMessage(mtOnConnAddStream, res);
     }
     void OnRemoveStream(const std::string& id, const std::string& stream_id) {
@@ -331,17 +334,18 @@ void CmdHost::handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdHo
     }
 
     auto stream = new LibmuxerOutputStream();
+    auto stream_id = newReqId();
     {
         std::lock_guard<std::mutex> lock(streams_map_lock_);
-        streams_map_[stream->Id()] = stream;
+        streams_map_[stream_id] = stream;
     }
-    m->AddOutput(stream->Id(), stream);
+    m->AddOutput(stream_id, stream);
 
     m->Start();
 
     Json::Value res;
     res[kId] = id;
-    res["output_stream_id"] = stream->Id();
+    res["output_stream_id"] = stream_id;
     observer->OnSuccess(res);
 }
 
@@ -395,6 +399,18 @@ void CmdHost::handleLibmuxerAddInput(const Json::Value& req, rtc::scoped_refptr<
     observer->OnSuccess(res);
 }
 
+void CmdHost::handleLibmuxerRemoveInput(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    auto m = checkLibmuxer(req, observer);
+    if (m == NULL) {
+        return;
+    }
+    auto id = jsonAsString(req[kStreamId]);
+    m->RemoveInput(id);
+
+    Json::Value res;
+    observer->OnSuccess(res);
+}
+
 void CmdHost::handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
     auto m = checkLibmuxer(req, observer);
     if (m == NULL) {
@@ -411,6 +427,34 @@ void CmdHost::handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_ref
             }
         }
     }
+}
+
+void CmdHost::handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    auto id = jsonAsString(req[kId]);
+
+    Stream *stream = NULL;
+    {
+        std::lock_guard<std::mutex> lock(streams_map_lock_);
+        stream = streams_map_[id];
+    }
+    if (stream == NULL) {
+        observer->OnFailure(errInvalidParams, "stream not found");
+        return;
+    }
+
+    auto url = jsonAsString(req["url"]);
+    if (url == "") {
+        observer->OnFailure(errInvalidParams, "url invalid");
+        return;
+    }
+
+    auto sink = new muxer::RtmpSink(url);
+    auto sinkid = newReqId();
+    stream->AddSink(sinkid, sink);
+
+    Json::Value res;
+    res[kId] = sinkid;
+    observer->OnSuccess(res);
 }
 
 class CmdDoneWriteResObserver: public CmdHost::CmdDoneObserver {
@@ -453,6 +497,10 @@ void CmdHost::handleReq(rtc::scoped_refptr<MsgPump::Request> req) {
         handleLibmuxerAddInput(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtLibmuxerSetInputsOpt) {
         handleLibmuxerSetInputsOpt(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtLibmuxerRemoveInput) {
+        handleLibmuxerRemoveInput(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtStreamAddSink) {
+        handleStreamAddSink(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     }
 }
 

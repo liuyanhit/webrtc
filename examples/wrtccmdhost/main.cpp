@@ -2,12 +2,15 @@
 #include "rtc_base/flags.h"
 #include "rtc_base/flags.h"
 #include "rtc_base/logging.h"
+#include <signal.h>
 
 unsigned int muxer::global::nLogLevel = 4;
 DEFINE_int(logLevel, 4, "log level");
 DEFINE_int(wrtcLogLevel, 0, "wrtc log level");
 
 int main(int argc, char **argv) {
+    signal(SIGPIPE, SIG_IGN);
+
     if (rtc::FlagList::SetFlagsFromCommandLine(&argc, argv, false) != 0) {
         rtc::FlagList::Print(NULL, false);        
         return -1;

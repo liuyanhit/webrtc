@@ -205,8 +205,15 @@ namespace muxer
         public:
                 RtmpSink(const std::string& url);
 
+                void OnStart();
+                void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame);
+                void OnStop();
+
         private:
-                RtmpSender *rtmp_sender_;
+                std::string url_;
+                std::thread sender_;
+                std::atomic<bool> bSenderExit_;
+                SharedQueue<std::shared_ptr<MediaFrame>> muxedQ_;
         };
 
         class Output : public OptionMap

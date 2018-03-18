@@ -894,6 +894,7 @@ int RtmpSender::Send(IN const std::string& _url, IN const std::shared_ptr<MediaP
 
         SendStreamMetaInfo(*_pPacket);
 
+        Info("SendPacket");
         // send RTMP supported data
         int nStatus = 0;
         switch(_pPacket->Codec()) {
@@ -911,6 +912,7 @@ int RtmpSender::Send(IN const std::string& _url, IN const std::shared_ptr<MediaP
                 }
                 return 0; // do nothing
         }
+        Info("SendPacketEnd Status=%d", nStatus);
 
         return nStatus;
 }
@@ -1405,6 +1407,67 @@ ssize_t RtmpSender::AccTimestamp(IN const size_t& _nNow, OUT size_t& _nBase, OUT
         return nTimestamp;
 }
 
+RtmpSink::RtmpSink(const std::string& url): muxedQ_(100){
+        url_ = url;
+        bSenderExit_.store(false);
+}
+
+void RtmpSink::OnStart() {
+        auto snd = [this] {
+                while (bSenderExit_.load() == false) {
+                        auto vEncoder = std::make_unique<AvEncoder>();
+                        auto aEncoder = std::make_unique<AvEncoder>();
+                        auto avSender = std::make_unique<RtmpSender>();
+
+                        vEncoder->Bitrate(1500);
+                        aEncoder->Bitrate(100);
+
+                        auto encoderHook = [&](IN const std::shared_ptr<MediaPacket>& _pPacket) -> int {
+                                if (bSenderExit_.load() == true) {
+                                        return -1;
+                                }
+
+                                // TODO delete
+                                //_pPacket->Print();
+                                return avSender->Send(url_, _pPacket);
+                        };
+
+                        while (bSenderExit_.load() == false) {
+                                std::shared_ptr<MediaFrame> pFrame;
+                                if (muxedQ_.PopWithTimeout(pFrame, std::chrono::milliseconds(10)) == false) {
+                                        continue;
+                                }
+                                Verbose("OutputQueueSize %zu", muxedQ_.Size());
+
+                                int nStatus = 0;
+                                if (pFrame->Stream() == STREAM_VIDEO) {
+                                        nStatus = vEncoder->Encode(pFrame, encoderHook);
+                                } else if (pFrame->Stream() == STREAM_AUDIO) {
+                                        DebugPCM("/tmp/rtc.out.s16", pFrame->AvFrame()->data[0], pFrame->AvFrame()->linesize[0]);
+                                        nStatus = aEncoder->Encode(pFrame, encoderHook);
+                                }
+
+                                if (nStatus != 0) {
+                                        break;
+                                }
+                        }
+                }
+        };
+
+        sender_ = std::thread(snd);
+}
+
+void RtmpSink::OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
+        muxedQ_.TryPush(frame);
+}
+
+void RtmpSink::OnStop() {
+        bSenderExit_.store(true);
+        if (sender_.joinable()) {
+                sender_.join();
+        }
+}
+
 //
 // Output
 //
@@ -1430,7 +1493,6 @@ std::string Output::Name()
 void Output::Start(IN FrameSender* stream) {
         stream_ = stream;
         onFrame_ = [&](IN std::shared_ptr<MediaFrame>& pFrame) {
-                Info("OutputFrame");
                 stream_->SendFrame(pFrame);
                 return true;
         };
