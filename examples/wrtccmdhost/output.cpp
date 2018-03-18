@@ -49,7 +49,7 @@ int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
         }
 
         // find encoder
-        AVCodec* pAvCodec;
+        AVCodec* pAvCodec = nullptr;
         switch (_pFrame->Stream()) {
         case STREAM_AUDIO: pAvCodec = avcodec_find_encoder_by_name("libfdk_aac"); break;
         case STREAM_VIDEO: pAvCodec = avcodec_find_encoder_by_name("libx264"); break;
