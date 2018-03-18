@@ -237,7 +237,7 @@ int AvEncoder::EncodeAac(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHand
 
         // notice, for aac, each time encoder only accept 1 frame (1024bytes per channel) no more no less
         _pFrame->AvFrame()->nb_samples = pAvEncoderContext_->frame_size;
-        _pFrame->AvFrame()->format= pAvEncoderContext_->sample_fmt;
+        _pFrame->AvFrame()->format = pAvEncoderContext_->sample_fmt;
 
         // if we have data left from last encoding , append to the beginning of frame
         if (frameBuffer_.size() > 0) {
@@ -927,6 +927,8 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                                 Error("flv: write header failed");
                                 return -1;
                         }
+                        keepSpsPpsInNalus_ = true;
+                        useAnnexbConcatNalus_ = true;
                 }
         }
 
@@ -957,7 +959,7 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                 Info("rtmp: connection is established");
         }
 
-        SendStreamMetaInfo(*_pPacket);
+        //SendStreamMetaInfo(*_pPacket);
 
         // send RTMP supported data
         int nStatus = 0;
@@ -1138,10 +1140,16 @@ int RtmpSender::SendH264Packet(IN const MediaPacket& _packet)
                         it = nalus.erase(it);
                         continue;
                 case 7:
+                        if (keepSpsPpsInNalus_) {
+                                break;
+                        }
                         pSps_ = std::make_shared<H264Nalu>(it->Data(), it->Size());
                         it = nalus.erase(it);
                         continue;
                 case 8:
+                        if (keepSpsPpsInNalus_) {
+                                break;
+                        }
                         pPps_ = std::make_shared<H264Nalu>(it->Data(), it->Size());
                         it = nalus.erase(it);
                         continue;
@@ -1166,10 +1174,17 @@ int RtmpSender::SendH264Nalus(IN const std::vector<H264Nalu>& _nalus, IN const M
                 }
                 int i = body.size();
                 body.resize(body.size() + nalu.Size() + 4);
-                body[i++] = nalu.Size() >> 24;
-                body[i++] = nalu.Size() >> 16;
-                body[i++] = nalu.Size() >> 8;
-                body[i++] = nalu.Size() & 0xff;
+                if (useAnnexbConcatNalus_) {
+                        body[i++] = 0;
+                        body[i++] = 0;
+                        body[i++] = 0;
+                        body[i++] = 1;
+                } else {
+                        body[i++] = nalu.Size() >> 24;
+                        body[i++] = nalu.Size() >> 16;
+                        body[i++] = nalu.Size() >> 8;
+                        body[i++] = nalu.Size() & 0xff;
+                }
                 std::copy(nalu.Data(), nalu.Data() + nalu.Size(), &body[i]);
         }
 
@@ -1443,14 +1458,18 @@ int RtmpSender::SendRawPacket(IN unsigned int _nPacketType, IN int _nHeaderType,
         int r = -1;
         // send to target server
         if (pRtmp_ != nullptr) {
-                if (RTMP_SendPacket(pRtmp_, &packet, 0)) {
-                        r = 0;
+                if (!RTMP_SendPacket(pRtmp_, &packet, 0)) {
+                        goto out_free;
                 }
         } else if (pFlvFile_ != nullptr) {
-                r = FlvFileWritePacket(pFlvFile_, &packet);
+                if (FlvFileWritePacket(pFlvFile_, &packet) < 0) {
+                        goto out_free;
+                }
         }
-        RTMPPacket_Free(&packet);
+        r = 0;
 
+out_free:
+        RTMPPacket_Free(&packet);
         return r;
 }
 

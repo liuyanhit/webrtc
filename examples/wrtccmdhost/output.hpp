@@ -196,6 +196,8 @@ namespace muxer
                 // RTMP object from RTMP dump
                 RTMP* pRtmp_ = nullptr;
                 FILE *pFlvFile_ = nullptr;
+                bool useAnnexbConcatNalus_ = false;
+                bool keepSpsPpsInNalus_ = false;
 
                 // sequence header
                 std::shared_ptr<H264Nalu> pSps_ = nullptr;
