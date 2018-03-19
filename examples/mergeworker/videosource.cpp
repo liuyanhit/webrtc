@@ -56,3 +56,29 @@ void FakeVideoSource::SetVideoFormat(int width, int height, int fps, int format)
 		fake_video_capture_->Start(cricket::VideoFormat(width_, height_, interval, format_));
 	}
 }
+
+// video source using ffmpeg
+VideoSource::VideoSource()
+{
+}
+
+VideoSource::VideoSource(const std::string& url)
+	: input_url_(url),
+	  receiver_(std::make_unique<muxer::AvReceiver>())
+{
+	packet_handler_ = [](const std::unique_ptr<muxer::MediaPacket> ptr)->int {
+		std::cout << "packet size ==== " << ptr->Size() << std::endl;
+		return 0;
+	};
+}
+
+void VideoSource::Start()
+{
+	receiver_->Receive(input_url_, packet_handler_);
+}
+
+VideoSource::~VideoSource()
+{
+}
+
+

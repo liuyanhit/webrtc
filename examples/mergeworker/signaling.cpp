@@ -20,11 +20,9 @@ protected:
 RtcConn::RtcConn(
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> rtcfactory
 ) : rtcfactory_(rtcfactory), streamid_(""), connid_("") {
-	Info("================= construct rtcconnection =========");
 }
 
 void RtcConn::Start() {
-	Info("Rtc Connection Start ==============");
     webrtc::PeerConnectionInterface::IceServer icesrv;
     webrtc::PeerConnectionInterface::RTCConfiguration rtcconf;
     /*
@@ -43,7 +41,8 @@ void RtcConn::Start() {
     offeropt.offer_to_receive_video = 1;
     wrtcconn_->CreateOffer((webrtc::CreateSessionDescriptionObserver *)this, offeropt);
 
-    Info("RtcConnStarted");
+	last_time_ = std::chrono::high_resolution_clock::now();
+    Info("RtcConnStarted...");
 }
 
 void RtcConn::OnRecvIceCandidate(const std::string& c_) {
@@ -94,6 +93,7 @@ void RtcConn::OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState 
 }
 
 void RtcConn::OnAddStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
+	std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
     webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
 
@@ -154,7 +154,7 @@ void RtcConn::OnIceCandidate(const webrtc::IceCandidateInterface* candidate) {
 }
 
 void RtcConn::OnFrame(const webrtc::VideoFrame& video_frame) {
-    Info("================================ onFrame");
+	std::cout << "==========================================================" << std::endl;
     Verbose("OnFrameVideo");
     if (OnVideo != nullptr)
         OnVideo(video_frame);
@@ -166,7 +166,7 @@ void RtcConn::OnData(const void* audio_data,
     size_t number_of_channels,
     size_t number_of_frames) 
 {
-	Info("=============================== onData");
+	std::cout << "*********************************************************" << std::endl;
     Verbose("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
     if (OnAudio != nullptr)
         OnAudio(audio_data, bits_per_sample, sample_rate, number_of_channels, number_of_frames);
@@ -174,7 +174,6 @@ void RtcConn::OnData(const void* audio_data,
 
 // TODO
 void RtcConn::OnStatsDelivered(const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
-
 	Json::Value value;
 	Json::Reader reader;
 	if (!reader.parse(report->ToJson(), value)) {
@@ -186,12 +185,34 @@ void RtcConn::OnStatsDelivered(const rtc::scoped_refptr<const webrtc::RTCStatsRe
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time_);
 	last_time_ = now;
 	for (uint32_t i = 0; i < value.size(); ++i) {
-		stats_report_.width_ = value[i]["frameWidth"].asInt();
-		stats_report_.height_ = value[i]["frameHeight"].asInt();
-		stats_report_.bytesSent_ = value[i]["bytesSent"].asInt();
-		stats_report_.bytesReceived_ = value[i]["bytesReceived"].asInt();
-	}
+		// inbound
+		if (value[i]["type"].asString().compare("inbound-rtp") == 0) {
+			
+			if (value[i]["mediaType"].asString().compare("audio") == 0) {
+				stats_report_.bytesReceived_ = value[i]["bytesReceived"].asUInt64();
+			} else if (value[i]["mediaType"].asString().compare("video") == 0) {
+				stats_report_.bytesReceived_ = value[i]["bytesReceived"].asUInt64();
+			}
+			stats_report_.inputResolution_ = stats_report_.width_ * stats_report_.height_;
 
+		// outbound
+		} else if (value[i]["type"].asString().compare("outbound-rtp") == 0) {
+			if (value[i]["mediaType"].asString().compare("audio") == 0) {
+				stats_report_.bytesSent_ = value[i]["bytesSent"].asUInt64();
+			} else if (value[i]["mediaType"].asString().compare("video") == 0) {
+				stats_report_.bytesSent_ = value[i]["bytesSent"].asUInt64();
+			}
+			stats_report_.outputResolution_ = stats_report_.width_ * stats_report_.height_;
+		}
+
+		if (value[i]["type"].asString().compare("track") == 0
+			&& value[i]["kind"].asString().compare("video") == 0) {
+			stats_report_.width_ = value[i]["frameWidth"].asInt();
+			stats_report_.height_ = value[i]["frameHeight"].asInt();
+		}
+
+	}
+	
 	gS->onStatsUpdate(duration);
 }
 
@@ -307,8 +328,7 @@ Signaling::~Signaling() {
 void Signaling::addRtcConn(const std::string& id, rtc::scoped_refptr<RtcConn> c) {
     std::lock_guard<std::mutex> lock(rtcconn_map_lock_);
 	Info("add RtcConnection(id:%s)", id.c_str());
-	rtcconn_map_.insert(std::pair<std::string, rtc::scoped_refptr<RtcConn>>(id, c));
-    //rtcconn_map_[id] = c;
+    rtcconn_map_[id] = c;
 }
 
 rtc::scoped_refptr<RtcConn> Signaling::findRtcConn(const std::string& id) {
@@ -449,11 +469,10 @@ void Signaling::connectRun(const std::string& url) {
 // TODO
 void Signaling::getStatistics() {
 	while(stats_thread_exit_flag_.load() != true) {
-		std::cout << "get statistics =====================" << std::endl;
 		if (rtcconn_map_.size() == 0) {
 			// TODO
-			std::cout << "no available rtccon!!" << std::endl;
-			break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+			continue;
 		}
 		auto it = rtcconn_map_.begin();
 		while (it != rtcconn_map_.end()) {
@@ -468,18 +487,18 @@ void Signaling::onStatsUpdate(std::chrono::duration<uint64_t, std::milli> durati
 	using namespace std::chrono;
 	std::lock_guard<std::mutex> lock_map(rtcconn_map_lock_);
 	if (rtcconn_map_.size() == 0) {
-		// TODO
-		std::cout << "no valid rtc connection!!=================" << std::endl;
 		return;
 	}
 	auto it = rtcconn_map_.begin();
 	uint64_t input = 0;
 	uint64_t output = 0;
-	int32_t res = 0;
+	int32_t input_res = 0;
+	int32_t output_res = 0;
 	while (it != rtcconn_map_.end()) {
 		input += it->second->stats_report_.bytesReceived_;
 		output += it->second->stats_report_.bytesSent_;
-		res += (it->second->stats_report_.width_ * it->second->stats_report_.height_);
+		input_res += it->second->stats_report_.inputResolution_;
+		output_res += it->second->stats_report_.outputResolution_;
 		++it;
 	}
 	auto now = high_resolution_clock::now();
@@ -494,7 +513,8 @@ void Signaling::onStatsUpdate(std::chrono::duration<uint64_t, std::milli> durati
 	statsJson_["duration"] = duration_cast<milliseconds>(duration).count();
 	statsJson_["inputBytes"] = Json::UInt64(input);
 	statsJson_["outputBytes"] = Json::UInt64(output);
-	statsJson_["resolution"] = Json::Int(res);
+	statsJson_["inutResolution"] = Json::Int(input_res);
+	statsJson_["outputResolution"] = Json::Int(output_res);
 }
 
 void Signaling::notifyStats()
@@ -514,7 +534,7 @@ void Signaling::notifyStats()
 		httpcli->CurlEasySetopt<const char*>(CURLOPT_POSTFIELDS, content.c_str());
 		auto res = httpcli->CurlEasyPerform();
 		if (res != CURLE_OK) {
-			std::cout << "curl failed !!! res = " << res << std::endl;
+			Error("http post to %s failed res(%d)", posturl_.c_str(), res);
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 	}

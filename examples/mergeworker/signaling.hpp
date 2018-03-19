@@ -56,8 +56,10 @@ inline void CurlWrapper::CurlEasySetopt<struct curl_slist*>(CURLoption opt, stru
 
 class StatisticsReport {
 public:
-	uint32_t 	width_;
-	uint32_t	height_;
+	int32_t 	width_;
+	int32_t		height_;
+	int32_t 	inputResolution_;
+	int32_t 	outputResolution_;
 	uint64_t	bytesSent_;
 	uint64_t	bytesReceived_;
 };

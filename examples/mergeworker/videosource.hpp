@@ -14,9 +14,16 @@ public:
 // TODO
 class VideoSource : public MediaSource {
 public:
-	VideoSource() = default;
-	~VideoSource() = default;
-	void Start(){};
+	VideoSource();
+	VideoSource(const std::string&);
+	~VideoSource();
+
+	void Start();
+
+private:
+	std::string input_url_;
+	std::unique_ptr<muxer::AvReceiver> receiver_;
+	std::function<int(const std::unique_ptr<muxer::MediaPacket>)> packet_handler_;
 };
 
 class FakeVideoSource: public MediaSource {
