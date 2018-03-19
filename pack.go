@@ -10,7 +10,121 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"bytes"
+	"path/filepath"
 )
+
+func Exists(name string) bool {
+    if _, err := os.Stat(name); err != nil {
+    if os.IsNotExist(err) {
+                return false
+            }
+    }
+    return true
+}
+
+func Realpath(fpath string) (string, error) {
+
+	if len(fpath) == 0 {
+		return "", os.ErrInvalid
+	}
+
+	if !filepath.IsAbs(fpath) {
+		pwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		fpath = filepath.Join(pwd, fpath)
+	}
+
+	path := []byte(fpath)
+	nlinks := 0
+	start := 1
+	prev := 1
+	for start < len(path) {
+		c := nextComponent(path, start)
+		cur := c[start:]
+
+		switch {
+
+		case len(cur) == 0:
+			copy(path[start:], path[start+1:])
+			path = path[0 : len(path)-1]
+
+		case len(cur) == 1 && cur[0] == '.':
+			if start+2 < len(path) {
+				copy(path[start:], path[start+2:])
+			}
+			path = path[0 : len(path)-2]
+
+		case len(cur) == 2 && cur[0] == '.' && cur[1] == '.':
+			copy(path[prev:], path[start+2:])
+			path = path[0 : len(path)+prev-(start+2)]
+			prev = 1
+			start = 1
+
+		default:
+
+			fi, err := os.Lstat(string(c))
+			if err != nil {
+				return "", err
+			}
+			if isSymlink(fi) {
+
+				nlinks++
+				if nlinks > 16 {
+					return "", os.ErrInvalid
+				}
+
+				var link string
+				link, err = os.Readlink(string(c))
+				after := string(path[len(c):])
+
+				// switch symlink component with its real path
+				path = switchSymlinkCom(path, start, link, after)
+
+				prev = 1
+				start = 1
+			} else {
+				// Directories
+				prev = start
+				start = len(c) + 1
+			}
+		}
+	}
+
+	for len(path) > 1 && path[len(path)-1] == os.PathSeparator {
+		path = path[0 : len(path)-1]
+	}
+	return string(path), nil
+
+}
+
+// test if a link is symbolic link
+func isSymlink(fi os.FileInfo) bool {
+	return fi.Mode()&os.ModeSymlink == os.ModeSymlink
+}
+
+// switch a symbolic link component to its real path
+func switchSymlinkCom(path []byte, start int, link, after string) []byte {
+
+	if link[0] == os.PathSeparator {
+		// Absolute links
+		return []byte(filepath.Join(link, after))
+	}
+
+	// Relative links
+	return []byte(filepath.Join(string(path[0:start]), link, after))
+}
+
+// get the next component
+func nextComponent(path []byte, start int) []byte {
+	v := bytes.IndexByte(path[start:], os.PathSeparator)
+	if v < 0 {
+		return path
+	}
+	return path[0 : start+v]
+}
 
 var ldlinuxpath = "/lib64/ld-linux-x86-64.so.2"
 
@@ -50,12 +164,8 @@ func installNameTool(lib string, change [][]string) error {
 		args = append(args, c[1])
 	}
 	args = append(args, lib)
-	c := exec.Command("install_name_tool", args...)
 
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("install_name_tool(%v): %s", change, err)
-	}
-	return nil
+	return runcmd("install_name_tool", args...)
 }
 
 type CopyEntry struct {
@@ -128,16 +238,14 @@ func packlibDarwin(copy []CopyEntry) error {
 			dstdir = "bin"
 		}
 		fname := path.Join(dstdir, path.Base(p))
-		c := exec.Command("cp", "-f", p, fname)
-		if err := c.Run(); err != nil {
-			return fmt.Errorf("cp %s failed: %s", p, err)
+		if err := runcmd("cp", "-f", p, fname); err != nil {
+			return err
 		}
-		c = exec.Command("chmod", "744", fname)
-		if err := c.Run(); err != nil {
-			return fmt.Errorf("chmod %s failed: %s", fname, err)
+		if err := runcmd("chmod", "744", fname); err != nil {
+			return err
 		}
 		if err := installNameTool(fname, change); err != nil {
-			return fmt.Errorf("change %s failed: %s", fname, err)
+			return err
 		}
 		fmt.Println("copy", fname)
 	}
@@ -231,26 +339,48 @@ func packlibLinux(copy []CopyEntry) error {
 		dfs(Entry{Name: path.Base(f.Realpath), Realpath: f.Realpath, IsBin: f.IsBin})
 	}
 
+	cp := func(src, dst string) error {
+		if err := runcmd("cp", "-f", src, dst); err != nil {
+			return err
+		}
+		fmt.Println("copy", src, dst)
+		return nil
+	}
+
+	finddbglib := func(src string) (file string) {
+		if f := path.Join("/usr/lib/debug", src); Exists(f) {
+			return f
+		}
+		return
+	}
+
 	for _, e := range visited {
 		if e.Realpath == "" {
 			continue
 		}
-		src := e.Realpath
+
+		src, err := Realpath(e.Realpath)
+		if err != nil {
+			return err
+		}
+
 		dstdir := "lib"
 		if e.IsBin {
 			dstdir = "bin"
 		}
 		dst := path.Join(dstdir, e.Name)
-		c := exec.Command("cp", "-f", src, dst)
-		if err := c.Run(); err != nil {
-			err = fmt.Errorf("cp %s %s: %s", src, dst, err)
+		if err := cp(src, dst); err != nil {
 			return err
 		}
-		fmt.Println(src, dst)
+
+		if dbglib := finddbglib(src); dbglib != "" {
+			if err := cp(dbglib, path.Join("libdbg", e.Name)); err != nil {
+				return err
+			}
+		}
 	}
 
-	c := exec.Command("cp", "-f", ldlinuxpath, path.Join("lib", "ld-linux.so"))
-	if err := c.Run(); err != nil {
+	if err := cp(ldlinuxpath, path.Join("lib", "ld-linux.so")); err != nil {
 		return err
 	}
 
@@ -258,10 +388,10 @@ func packlibLinux(copy []CopyEntry) error {
 }
 
 func runPack(copy []CopyEntry) error {
-	os.RemoveAll("lib")
-	os.RemoveAll("bin")
-	os.Mkdir("lib", 0744)
-	os.Mkdir("bin", 0744)
+	for _, d := range []string{"lib", "bin", "libdbg"} {
+		os.RemoveAll(d)
+		os.Mkdir(d, 0744)
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		if err := packlibDarwin(copy); err != nil {
@@ -276,20 +406,15 @@ func runPack(copy []CopyEntry) error {
 }
 
 func runUpload(name string) error {
-	var c *exec.Cmd
 	uploadname := fmt.Sprintf("%s-%s.tar.bz2", name, runtime.GOOS)
 	tarname := fmt.Sprintf("/tmp/%d", time.Now().UnixNano())
 	defer os.Remove(tarname)
 
-	c = exec.Command("tar", "cjf", tarname, "bin", "lib")
-	if err := c.Run(); err != nil {
+	if err := runcmd("tar", "cjf", tarname, "bin", "lib"); err != nil {
 		return err
 	}
 
-	c = exec.Command("qup", tarname, uploadname)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	if err := c.Run(); err != nil {
+	if err := runcmd("qup", tarname, uploadname); err != nil {
 		return err
 	}
 
@@ -300,7 +425,11 @@ func runcmd(path string, args ...string) error {
 	c := exec.Command(path, args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	return c.Run()
+	if err := c.Run(); err != nil {
+		err = fmt.Errorf("run %v %v failed", path, args)
+		return err
+	}
+	return nil
 }
 
 func run() error {
