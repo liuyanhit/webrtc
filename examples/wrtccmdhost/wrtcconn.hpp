@@ -9,6 +9,7 @@
 #include "rtc_base/json.h"
 #include "rtc_base/refcount.h"
 #include "stream.hpp"
+#include "pc/peerconnectionfactory.h"
 
 class WRTCConn
 {
@@ -53,9 +54,12 @@ public:
     );
     bool AddIceCandidate(webrtc::IceCandidateInterface* candidate);
 
+    bool AddStream(SinkAddRemover* stream);
+
 private:
     std::string id_;
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_;
+    rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;
 };
 
 #endif

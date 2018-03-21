@@ -1,5 +1,11 @@
 #include "wrtcconn.hpp"
 #include "rtc_base/callback.h"
+#include "media/base/videobroadcaster.h"
+#include "pc/videotracksource.h"
+#include "api/video/i420_buffer.h"
+#include "api/video/video_frame.h"
+#include "media/base/videocommon.h"
+#include "rtc_base/timeutils.h"
 
 class WRTCStream: public Stream, rtc::VideoSinkInterface<webrtc::VideoFrame>, webrtc::AudioTrackSinkInterface {
 public:
@@ -126,6 +132,7 @@ WRTCConn::WRTCConn(
     WRTCConn::ConnObserver* conn_observer
 ) {
     id_ = newReqId();
+    pc_factory_ = pc_factory;
     pc_ = pc_factory->CreatePeerConnection(rtcconf, nullptr, nullptr, nullptr, new PeerConnectionObserver(id_, conn_observer));
 }
 
@@ -241,4 +248,34 @@ void WRTCConn::SetRemoteDescCreateAnswer(
 
 bool WRTCConn::AddIceCandidate(webrtc::IceCandidateInterface* candidate) {
     return pc_->AddIceCandidate(candidate);
+}
+
+class VideoBroadcasterStreamSink: public SinkObserver {
+public:
+    VideoBroadcasterStreamSink(rtc::VideoBroadcaster *source) : source_(source) {}
+    
+    void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
+        rtc::scoped_refptr<webrtc::I420Buffer> buffer(
+            webrtc::I420Buffer::Create(frame->AvFrame()->width, frame->AvFrame()->height)
+        );
+        buffer->InitializeData();
+
+        // TODO: copy muxer::MediaFrame data to buffer
+
+        source_->OnFrame(webrtc::VideoFrame(
+            buffer, webrtc::kVideoRotation_0,
+            0 / rtc::kNumNanosecsPerMicrosec));
+    }
+
+    rtc::VideoBroadcaster *source_;
+};
+
+bool WRTCConn::AddStream(SinkAddRemover* stream) {
+    webrtc::MediaStreamInterface *media_stream = pc_factory_->CreateLocalMediaStream(newReqId());
+    rtc::VideoBroadcaster *source = new rtc::VideoBroadcaster();
+    webrtc::VideoTrackSource *track_source = new rtc::RefCountedObject<webrtc::VideoTrackSource>(source, false);
+    webrtc::VideoTrackInterface *track = pc_factory_->CreateVideoTrack(newReqId(), track_source);
+    media_stream->AddTrack(track);
+    stream->AddSink(newReqId(), new VideoBroadcasterStreamSink(source));
+    return pc_->AddStream(media_stream);
 }
