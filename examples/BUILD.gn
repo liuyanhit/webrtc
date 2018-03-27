@@ -98,7 +98,7 @@ rtc_executable("mergeworker") {
     "../modules/audio_device:audio_device",
     "//third_party/ffmpeg",
     "//third_party/librtmp",
-    "//third_party/curl",
+    #"//third_party/curl",
   ]
   suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
 }
