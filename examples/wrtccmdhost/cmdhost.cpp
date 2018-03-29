@@ -32,6 +32,8 @@ const std::string mtLibmuxerAddInput = "libmuxer-add-input";
 const std::string mtLibmuxerSetInputsOpt = "libmuxer-set-inputs-opt";
 const std::string mtLibmuxerRemoveInput = "libmuxer-remove-input";
 const std::string mtStreamAddSink = "stream-add-sink";
+const std::string mtNewCanvasStream = "new-canvas-stream";
+const std::string mtConnAddStream = "conn-add-stream";
 
 static void parseOfferAnswerOpt(const Json::Value& v, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions& opt) {
     auto audio = v["audio"];
@@ -152,7 +154,7 @@ void CmdHost::handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneOb
     }
 
     auto conn_observer = new ConnObserver(this);
-    auto conn = new WRTCConn(pc_factory_, rtcconf, conn_observer);
+    auto conn = new WRTCConn(pc_factory_, rtcconf, conn_observer, &wrtc_signal_thread_);
     conn_observer->id_ = conn->ID();
     
     {
@@ -163,6 +165,19 @@ void CmdHost::handleNewConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneOb
     Json::Value res;
     res[kId] = conn->ID();
     observer->OnSuccess(res);
+}
+
+Stream* CmdHost::checkStream(const std::string& id, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    Stream *stream = NULL;
+    {
+        std::lock_guard<std::mutex> lock(streams_map_lock_);
+        stream = streams_map_[id];
+    }
+    if (stream == NULL) {
+        observer->OnFailure(errInvalidParams, "stream not found");
+        return NULL;
+    }
+    return stream;
 }
 
 WRTCConn* CmdHost::checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
@@ -379,15 +394,10 @@ void CmdHost::handleLibmuxerAddInput(const Json::Value& req, rtc::scoped_refptr<
     if (m == NULL) {
         return;
     }
-    auto id = jsonAsString(req[kStreamId]);
 
-    Stream *stream = NULL;
-    {
-        std::lock_guard<std::mutex> lock(streams_map_lock_);
-        stream = streams_map_[id];
-    }
+    auto id = jsonAsString(req[kStreamId]);
+    Stream *stream = checkStream(id, observer);
     if (stream == NULL) {
-        observer->OnFailure(errInvalidParams, "stream not found");
         return;
     }
 
@@ -457,6 +467,112 @@ void CmdHost::handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<Cmd
     observer->OnSuccess(res);
 }
 
+class CanvasStream: public Stream {
+public:
+    CanvasStream() : fps_(25), w_(320), h_(240), bg_(0xff0000) {
+    }
+
+    void Start() {
+        auto emit = [this] {
+            int ts_ms = 0;
+            while (exit_.load() == false) {
+                std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
+                frame->Stream(muxer::STREAM_VIDEO);
+                frame->Codec(muxer::CODEC_H264);
+
+                auto avframe = frame->AvFrame();
+                avframe->format = AV_PIX_FMT_YUV420P;
+                avframe->height = h_.load();
+                avframe->width = w_.load();
+                avframe->pts = ts_ms;
+                av_frame_get_buffer(avframe, 32);
+
+                uint32_t bg = bg_.load();
+                uint8_t nR = bg >> 16;
+                uint8_t nG = (bg >> 8) & 0xff;
+                uint8_t nB = bg & 0xff;
+                uint8_t nY = static_cast<uint8_t>((0.257 * nR) + (0.504 * nG) + (0.098 * nB) + 16);
+                uint8_t nU = static_cast<uint8_t>((0.439 * nR) - (0.368 * nG) - (0.071 * nB) + 128);
+                uint8_t nV = static_cast<uint8_t>(-(0.148 * nR) - (0.291 * nG) + (0.439 * nB) + 128);
+
+                memset(avframe->data[0], nY, avframe->linesize[0] * avframe->height);
+                memset(avframe->data[1], nU, avframe->linesize[1] * (avframe->height/2));
+                memset(avframe->data[2], nV, avframe->linesize[2] * (avframe->height/2));
+
+                SendFrame(frame);
+
+                double sleep_s = 1.0/((double)fps_.load());
+                usleep((useconds_t)(sleep_s*1e6));
+                ts_ms += int(sleep_s*1e3);
+            }
+        };
+        thread_ = std::thread(emit);
+    }
+
+    void Stop() {
+        exit_.store(true);
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+
+    std::thread thread_;
+    std::atomic<bool> exit_;
+    std::atomic<int> fps_;
+    std::atomic<int> w_;
+    std::atomic<int> h_;
+    std::atomic<uint32_t> bg_;
+};
+
+void CmdHost::handleNewCanvasStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    int fps = jsonAsInt(req["fps"]);
+    int w = jsonAsInt(req["w"]);
+    int h = jsonAsInt(req["h"]);
+    uint32_t bg = (int)jsonAsInt(req["bg"]);
+
+    CanvasStream *stream = new CanvasStream();
+
+    if (fps) {
+        stream->fps_.store(fps);
+    }
+    if (w) {
+        stream->w_.store(w);
+    }
+    if (h) {
+        stream->h_.store(h);
+    }
+    stream->bg_.store(bg);
+    stream->Start();
+
+    auto stream_id = newReqId();
+    {
+        std::lock_guard<std::mutex> lock(streams_map_lock_);
+        streams_map_[stream_id] = stream;
+    }
+    Json::Value res;
+    res[kId] = stream_id;
+    observer->OnSuccess(res);
+}
+
+void CmdHost::handleConnAddStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    auto conn = checkConn(req, observer);
+    if (conn == NULL) {
+        return;
+    }
+    
+    auto stream = checkStream(jsonAsString(req["stream_id"]), observer);
+    if (stream == NULL) {
+        return;
+    }
+
+    if (!conn->AddStream(stream)) {
+        observer->OnFailure(errInvalidParams, "add stream failed");
+        return;
+    }
+
+    observer->OnSuccess();
+}
+
 class CmdDoneWriteResObserver: public CmdHost::CmdDoneObserver {
 public:
     CmdDoneWriteResObserver(rtc::scoped_refptr<MsgPump::Request> req) : req_(req) {}
@@ -501,6 +617,10 @@ void CmdHost::handleReq(rtc::scoped_refptr<MsgPump::Request> req) {
         handleLibmuxerRemoveInput(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtStreamAddSink) {
         handleStreamAddSink(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtNewCanvasStream) {
+        handleNewCanvasStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtConnAddStream) {
+        handleConnAddStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     }
 }
 

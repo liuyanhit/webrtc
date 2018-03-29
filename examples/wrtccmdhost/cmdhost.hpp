@@ -19,6 +19,10 @@ public:
 
     class CmdDoneObserver: public rtc::RefCountInterface {
     public:
+        virtual void OnSuccess() {
+            Json::Value res;
+            OnSuccess(res);
+        }
         virtual void OnSuccess(Json::Value& res) = 0;
         virtual void OnFailure(int code, const std::string& error) = 0;
     };
@@ -41,6 +45,7 @@ public:
 
     void writeMessage(const std::string& type, const Json::Value& msg);
     WRTCConn *checkConn(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    Stream *checkStream(const std::string& id, rtc::scoped_refptr<CmdDoneObserver> observer);
     muxer::AvMuxer *checkLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
 
     void handleCreateOfferSetLocalDesc(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
@@ -53,6 +58,8 @@ public:
     void handleLibmuxerRemoveInput(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleNewCanvasStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleConnAddStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleReq(rtc::scoped_refptr<MsgPump::Request> req);
     void handleMsg(const std::string& type, const Json::Value& body);
 };

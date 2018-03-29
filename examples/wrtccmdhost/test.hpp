@@ -19,8 +19,6 @@ public:
     }
 
     static void TestH264ResChangeEncodeFlv() {
-        av_register_all();
-
         auto s = new muxer::RtmpSink("/tmp/t.flv");
         s->OnStart();
 

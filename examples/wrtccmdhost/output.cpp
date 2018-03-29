@@ -1552,7 +1552,7 @@ void RtmpSink::OnStart() {
                                 if (muxedQ_.PopWithTimeout(pFrame, std::chrono::milliseconds(10)) == false) {
                                         continue;
                                 }
-                                Verbose("OutputQueueSize %zu", muxedQ_.Size());
+                                //Verbose("OutputQueueSize %zu", muxedQ_.Size());
 
                                 int nStatus = 0;
                                 if (pFrame->Stream() == STREAM_VIDEO) {

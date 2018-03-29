@@ -2,6 +2,7 @@
 #include "rtc_base/flags.h"
 #include "rtc_base/flags.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/thread.h"
 #include "test.hpp"
 #include <signal.h>
 
@@ -12,6 +13,7 @@ DEFINE_bool(runTests, false, "run tests");
 
 int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
+    av_register_all();
 
     if (rtc::FlagList::SetFlagsFromCommandLine(&argc, argv, false) != 0) {
         rtc::FlagList::Print(NULL, false);        
@@ -35,8 +37,6 @@ int main(int argc, char **argv) {
         Tests::Run();
         return 0;
     }
-
-    Verbose("Started");
 
     CmdHost *h = new CmdHost();
     h->Run();

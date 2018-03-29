@@ -35,7 +35,8 @@ public:
     WRTCConn(
         rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory, 
         webrtc::PeerConnectionInterface::RTCConfiguration rtcconf,
-        WRTCConn::ConnObserver* conn_observer
+        WRTCConn::ConnObserver* conn_observer,
+        rtc::Thread* signal_thread
     );
     std::string ID();
 
@@ -60,6 +61,7 @@ private:
     std::string id_;
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_;
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;
+    rtc::Thread* signal_thread_;
 };
 
 #endif

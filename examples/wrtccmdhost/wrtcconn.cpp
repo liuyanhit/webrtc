@@ -6,6 +6,8 @@
 #include "api/video/video_frame.h"
 #include "media/base/videocommon.h"
 #include "rtc_base/timeutils.h"
+#include "pc/videotrack.h"
+#include "pc/mediastream.h"
 
 class WRTCStream: public Stream, rtc::VideoSinkInterface<webrtc::VideoFrame>, webrtc::AudioTrackSinkInterface {
 public:
@@ -129,11 +131,13 @@ std::string WRTCConn::ID() {
 WRTCConn::WRTCConn(
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory, 
     webrtc::PeerConnectionInterface::RTCConfiguration rtcconf,
-    WRTCConn::ConnObserver* conn_observer
+    WRTCConn::ConnObserver* conn_observer,
+    rtc::Thread* signal_thread
 ) {
     id_ = newReqId();
     pc_factory_ = pc_factory;
     pc_ = pc_factory->CreatePeerConnection(rtcconf, nullptr, nullptr, nullptr, new PeerConnectionObserver(id_, conn_observer));
+    signal_thread_ = signal_thread;
 }
 
 class SetLocalDescObserver: public webrtc::SetSessionDescriptionObserver {
@@ -253,28 +257,42 @@ bool WRTCConn::AddIceCandidate(webrtc::IceCandidateInterface* candidate) {
 class VideoBroadcasterStreamSink: public SinkObserver {
 public:
     VideoBroadcasterStreamSink(rtc::VideoBroadcaster *source) : source_(source) {}
-    
+
     void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
+        AVFrame* avframe = frame->AvFrame();
+
         rtc::scoped_refptr<webrtc::I420Buffer> buffer(
-            webrtc::I420Buffer::Create(frame->AvFrame()->width, frame->AvFrame()->height)
+            webrtc::I420Buffer::Create(avframe->width, avframe->height)
         );
         buffer->InitializeData();
 
-        // TODO: copy muxer::MediaFrame data to buffer
+        const uint8_t* data_y = avframe->data[0];
+        const uint8_t* data_u = avframe->data[1];
+        const uint8_t* data_v = avframe->data[2];
 
-        source_->OnFrame(webrtc::VideoFrame(
-            buffer, webrtc::kVideoRotation_0,
-            0 / rtc::kNumNanosecsPerMicrosec));
+        int stride_y = avframe->linesize[0] * avframe->height;
+        int stride_u = avframe->linesize[1] * avframe->height / 2;
+        int stride_v = avframe->linesize[2] * avframe->height / 2;
+
+        yuv::CopyLine(buffer->MutableDataY(), buffer->StrideY(), data_y,
+                      stride_y, avframe->height);
+        yuv::CopyLine(buffer->MutableDataU(), buffer->StrideU(), data_u,
+                      stride_u, avframe->height / 2);
+        yuv::CopyLine(buffer->MutableDataV(), buffer->StrideV(), data_v,
+                      stride_v, avframe->height / 2);
+
+        source_->OnFrame(webrtc::VideoFrame(buffer, webrtc::kVideoRotation_0,
+                                            0 / rtc::kNumNanosecsPerMicrosec));
     }
 
     rtc::VideoBroadcaster *source_;
 };
 
 bool WRTCConn::AddStream(SinkAddRemover* stream) {
-    webrtc::MediaStreamInterface *media_stream = pc_factory_->CreateLocalMediaStream(newReqId());
+    auto media_stream = pc_factory_->CreateLocalMediaStream(newReqId());
     rtc::VideoBroadcaster *source = new rtc::VideoBroadcaster();
     webrtc::VideoTrackSource *track_source = new rtc::RefCountedObject<webrtc::VideoTrackSource>(source, false);
-    webrtc::VideoTrackInterface *track = pc_factory_->CreateVideoTrack(newReqId(), track_source);
+    auto track = pc_factory_->CreateVideoTrack(newReqId(), track_source);
     media_stream->AddTrack(track);
     stream->AddSink(newReqId(), new VideoBroadcasterStreamSink(source));
     return pc_->AddStream(media_stream);
