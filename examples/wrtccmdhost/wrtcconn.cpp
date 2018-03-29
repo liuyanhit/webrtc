@@ -27,7 +27,11 @@ public:
     }
 
     void OnFrame(const webrtc::VideoFrame& rtcframe) {
-        //Info("OnFrameVideo");
+        if (firstts_us == -1) {
+            firstts_us = rtcframe.timestamp_us();
+        }
+        auto ts_us = rtcframe.timestamp_us() - firstts_us;
+        //Info("OnFrameVideo ts=%lld", ts_us);
 
         std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
         frame->Stream(muxer::STREAM_VIDEO);
@@ -35,6 +39,7 @@ public:
         frame->AvFrame()->format = AV_PIX_FMT_YUV420P;
         frame->AvFrame()->height = rtcframe.height();
         frame->AvFrame()->width = rtcframe.width();
+        frame->AvFrame()->pts = ts_us / 1000;
         av_frame_get_buffer(frame->AvFrame(), 32);
 
         auto rtcfb = rtcframe.video_frame_buffer();
@@ -88,6 +93,8 @@ public:
 
         DebugPCM("/tmp/rtc.orig.s16", audio_data, bits_per_sample/8*number_of_frames);
     }
+
+    int64_t firstts_us = -1;
 };
 
 class PeerConnectionObserver: public webrtc::PeerConnectionObserver {
@@ -270,16 +277,12 @@ public:
         const uint8_t* data_u = avframe->data[1];
         const uint8_t* data_v = avframe->data[2];
 
-        int stride_y = avframe->linesize[0] * avframe->height;
-        int stride_u = avframe->linesize[1] * avframe->height / 2;
-        int stride_v = avframe->linesize[2] * avframe->height / 2;
-
         yuv::CopyLine(buffer->MutableDataY(), buffer->StrideY(), data_y,
-                      stride_y, avframe->height);
+                      avframe->linesize[0], avframe->height);
         yuv::CopyLine(buffer->MutableDataU(), buffer->StrideU(), data_u,
-                      stride_u, avframe->height / 2);
+                      avframe->linesize[1], avframe->height / 2);
         yuv::CopyLine(buffer->MutableDataV(), buffer->StrideV(), data_v,
-                      stride_v, avframe->height / 2);
+                      avframe->linesize[2], avframe->height / 2);
 
         source_->OnFrame(webrtc::VideoFrame(buffer, webrtc::kVideoRotation_0,
                                             0 / rtc::kNumNanosecsPerMicrosec));
