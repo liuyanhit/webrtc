@@ -116,84 +116,6 @@ int AvEncoder::PresetAac(IN const std::shared_ptr<MediaFrame>& _pFrame)
         const int nBytesToEncodeEachTime = pAvEncoderContext_->frame_size * nBytesPerSample * pAvEncoderContext_->channels;
         frameBuffer_.reserve(nBytesToEncodeEachTime);
 
-        // for fdkaac encoder, input samples should be PCM signed16le, otherwise do resampling
-        if (InitAudioResampling(_pFrame) < 0) {
-                return -1;
-        }
-
-        return 0;
-}
-
-int AvEncoder::InitAudioResampling(IN const std::shared_ptr<MediaFrame>& _pFrame)
-{
-        if (pAvEncoderContext_ == nullptr) {
-                Warn("internal: init resampling: encoder has not been initiated ");
-                return -1;
-        }
-
-        // for fdkaac encoder, input samples should be PCM signed16le, otherwise do resampling
-        if (_pFrame->AvFrame()->format != pAvEncoderContext_->sample_fmt) {
-                Info("input sample_format=%d, need sample_format=%d, initiate resampling",
-                     _pFrame->AvFrame()->format, pAvEncoderContext_->sample_fmt);
-                pSwr_ = swr_alloc();
-                av_opt_set_int(pSwr_, "in_channel_layout", av_get_default_channel_layout(_pFrame->AvFrame()->channels), 0);
-                av_opt_set_int(pSwr_, "out_channel_layout", pAvEncoderContext_->channel_layout,  0);
-                av_opt_set_int(pSwr_, "in_sample_rate", _pFrame->AvFrame()->sample_rate, 0);
-                av_opt_set_int(pSwr_, "out_sample_rate", pAvEncoderContext_->sample_rate, 0);
-                av_opt_set_sample_fmt(pSwr_, "in_sample_fmt", static_cast<AVSampleFormat>(_pFrame->AvFrame()->format), 0);
-                av_opt_set_sample_fmt(pSwr_, "out_sample_fmt", pAvEncoderContext_->sample_fmt,  0);
-                if (swr_init(pSwr_) != 0) {
-                        Error("could not initiate resampling");
-                        return -1;
-                }
-        }
-
-        return 0;
-}
-
-int AvEncoder::ResampleAudio(IN const std::shared_ptr<MediaFrame>& _pInFrame, OUT std::shared_ptr<MediaFrame>& _pOutFrame)
-{
-        // TODO: deprecated resampling logic
-        // refer to input.cpp AudioResampler
-
-        if (_pInFrame->AvFrame()->format == pAvEncoderContext_->sample_fmt) {
-                return 0;
-        }
-
-        int nBytesPerSample = av_get_bytes_per_sample(pAvEncoderContext_->sample_fmt);
-        int nBytesToEncodeEachTime = pAvEncoderContext_->frame_size * nBytesPerSample * pAvEncoderContext_->channels;
-        int nOutSamples = swr_get_out_samples(pSwr_, _pInFrame->AvFrame()->nb_samples);
-        int nSwrBufferSize = nOutSamples * pAvEncoderContext_->channels * nBytesPerSample;
-        if (nSwrBufferSize < nBytesToEncodeEachTime) {
-                // sometimes input frame data is less than encoder->frame_size
-                nSwrBufferSize = nBytesToEncodeEachTime;
-        }
-
-        auto pSwrBuffer = (uint8_t *)av_malloc(nSwrBufferSize);
-        auto pNewFrame = std::make_shared<MediaFrame>();
-        pNewFrame->ExtraBuffer(pSwrBuffer);
-        av_frame_copy_props(pNewFrame->AvFrame(), _pInFrame->AvFrame());
-        pNewFrame->AvFrame()->nb_samples = nOutSamples;
-        pNewFrame->AvFrame()->format = pAvEncoderContext_->sample_fmt;
-        pNewFrame->AvFrame()->channels = pAvEncoderContext_->channels;
-        pNewFrame->AvFrame()->channel_layout = pAvEncoderContext_->channel_layout;
-
-        // resample !
-        if (swr_convert(pSwr_, &pSwrBuffer,
-                        nOutSamples,
-                        (const uint8_t**)_pInFrame->AvFrame()->extended_data,
-                        _pInFrame->AvFrame()->nb_samples) < 0) {
-                Error("resampling failed from PCM format=%d to format=%d", _pInFrame->AvFrame()->format, pAvEncoderContext_->sample_fmt);
-                return -1;
-        }
-
-        if (avcodec_fill_audio_frame(pNewFrame->AvFrame(), pAvEncoderContext_->channels,
-                                     pAvEncoderContext_->sample_fmt, pSwrBuffer, nSwrBufferSize, 0) < 0) {
-                Error("resample: could not fill resampled data into frame");
-                return -1;
-        }
-
-        _pOutFrame = pNewFrame;
         return 0;
 }
 
@@ -245,19 +167,11 @@ int AvEncoder::Encode(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHandler
 
 int AvEncoder::EncodeAac(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHandlerType& _callback)
 {
-        // resample this frame if needed
-        if (_pFrame->AvFrame()->format != pAvEncoderContext_->sample_fmt) {
-                auto pResampled = std::shared_ptr<MediaFrame>();
-                if (ResampleAudio(_pFrame, pResampled) < 0) {
-                        return -1;
-                }
-                _pFrame = pResampled;
-        }
-
         // get number of bytes to encode
         int nBytesPerSample = av_get_bytes_per_sample(pAvEncoderContext_->sample_fmt);
         int nBytesToEncode = _pFrame->AvFrame()->nb_samples * nBytesPerSample * pAvEncoderContext_->channels;
-        const int nBytesToEncodeEachTime = pAvEncoderContext_->frame_size * nBytesPerSample * pAvEncoderContext_->channels;
+        //const int nBytesToEncodeEachTime = pAvEncoderContext_->frame_size * nBytesPerSample * pAvEncoderContext_->channels;
+        const int nBytesToEncodeEachTime = _pFrame->AvFrame()->linesize[0];
 
         // notice, for aac, each time encoder only accept 1 frame (1024bytes per channel) no more no less
         _pFrame->AvFrame()->nb_samples = pAvEncoderContext_->frame_size;
@@ -1522,7 +1436,11 @@ ssize_t RtmpSender::AccTimestamp(IN const size_t& _nNow, OUT size_t& _nBase, OUT
         return nTimestamp;
 }
 
-RtmpSink::RtmpSink(const std::string& url): muxedQ_(100){
+RtmpSink::RtmpSink(const std::string& url): 
+        muxedQ_(100),
+        resampler_()
+
+{
         url_ = url;
         bSenderExit_.store(false);
 }
@@ -1541,9 +1459,6 @@ void RtmpSink::OnStart() {
                                 if (bSenderExit_.load() == true) {
                                         return -1;
                                 }
-
-                                // TODO delete
-                                //_pPacket->Print();
                                 return avSender->Send(url_, _pPacket);
                         };
 
@@ -1552,7 +1467,6 @@ void RtmpSink::OnStart() {
                                 if (muxedQ_.PopWithTimeout(pFrame, std::chrono::milliseconds(10)) == false) {
                                         continue;
                                 }
-                                //Verbose("OutputQueueSize %zu", muxedQ_.Size());
 
                                 int nStatus = 0;
                                 if (pFrame->Stream() == STREAM_VIDEO) {
@@ -1572,8 +1486,13 @@ void RtmpSink::OnStart() {
         sender_ = std::thread(snd);
 }
 
-void RtmpSink::OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
-        muxedQ_.TryPush(frame);
+void RtmpSink::OnFrame(const std::shared_ptr<muxer::MediaFrame>& pFrame) {
+        if (pFrame->Stream() == STREAM_AUDIO) {
+                resampler_.Resample(pFrame, [&](const std::shared_ptr<MediaFrame>& out) {
+                        muxedQ_.TryPush(out);
+                });
+        }
+        muxedQ_.TryPush(pFrame);
 }
 
 void RtmpSink::OnStop() {
@@ -1589,8 +1508,8 @@ void RtmpSink::OnStop() {
 
 Output::Output(IN const std::string& _name)
         :OptionMap(),
-         name_(_name),
-         muxedQ_(100)
+        name_(_name),
+        muxedQ_(100)
 {
         bSenderExit_.store(false);
 }
@@ -1634,9 +1553,6 @@ void Output::Start(IN const std::string& _url)
                                 if (bSenderExit_.load() == true) {
                                         return -1;
                                 }
-
-                                // TODO delete
-                                //_pPacket->Print();
                                 return avSender->Send(_url, _pPacket);
                         };
 

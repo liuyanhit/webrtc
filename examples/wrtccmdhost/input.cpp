@@ -224,13 +224,10 @@ Input::Input(IN const std::string& _name)
         :OptionMap(),
          name_(_name),
          videoQ_(Input::VIDEO_Q_LEN),
-         audioQ_(Input::AUDIO_Q_LEN)
+         audioQ_(Input::AUDIO_Q_LEN),
+         resampler_()
 {
         bReceiverExit_.store(false);
-
-        // reserve sample buffer pool for format S16
-        sampleBuffer_.reserve(AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * 2 * 4);
-        sampleBuffer_.resize(0);
 }
 
 class InputSinkObserver: public SinkObserver {
@@ -378,50 +375,9 @@ void Input::SetVideo(const std::shared_ptr<MediaFrame>& _pFrame)
 
 void Input::SetAudio(const std::shared_ptr<MediaFrame>& _pFrame)
 {
-        // resample the audio and push data to the buffer
-
-        // lock buffer and queue
-        std::lock_guard<std::mutex> lock(sampleBufferLck_);
-
-        //size_t nLen;
-        size_t nBufSize = sampleBuffer_.size();
-        std::vector<uint8_t> buffer;
-
-        // resample to the same audio format
-        if (resampler_.Resample(_pFrame, buffer) != 0) {
-                return;
-        }
-
-        // save resampled data in audio buffer
-        sampleBuffer_.resize(sampleBuffer_.size() + buffer.size());
-        std::copy(buffer.begin(), buffer.end(), &sampleBuffer_[nBufSize]);
-
-        // if the buffer size meets the min requirement of encoding one frame, build a frame and push upon audio queue
-        size_t nSizeEachFrame = AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * av_get_bytes_per_sample(AudioResampler::SAMPLE_FMT);
-
-        //Info("resample %lu %lu %lu %p", buffer.size(), sampleBuffer_.size(), nSizeEachFrame, &sampleBuffer_);
-
-        while (sampleBuffer_.size() >= nSizeEachFrame) {
-                auto pNewFrame = std::make_shared<MediaFrame>();
-                pNewFrame->Stream(_pFrame->Stream());
-                pNewFrame->Codec(_pFrame->Codec());
-                av_frame_copy_props(pNewFrame->AvFrame(), _pFrame->AvFrame());
-                pNewFrame->AvFrame()->nb_samples = AudioResampler::FRAME_SIZE;
-                pNewFrame->AvFrame()->format = AudioResampler::SAMPLE_FMT;
-                pNewFrame->AvFrame()->channels = AudioResampler::CHANNELS;
-                pNewFrame->AvFrame()->channel_layout = AudioResampler::CHANNEL_LAYOUT;
-                pNewFrame->AvFrame()->sample_rate = AudioResampler::SAMPLE_RATE;
-                av_frame_get_buffer(pNewFrame->AvFrame(), 0);
-                std::copy(&sampleBuffer_[0], &sampleBuffer_[nSizeEachFrame], pNewFrame->AvFrame()->data[0]);
-        
-                DebugPCM("/tmp/rtc.re2.s16", &sampleBuffer_[0], nSizeEachFrame);
-
-                // move rest samples to beginning of the buffer
-                std::copy(&sampleBuffer_[nSizeEachFrame], &sampleBuffer_[sampleBuffer_.size()], sampleBuffer_.begin());
-                sampleBuffer_.resize(sampleBuffer_.size() - nSizeEachFrame);
-
+        resampler_.Resample(_pFrame, [&](const std::shared_ptr<MediaFrame>& pNewFrame) {
                 audioQ_.ForcePush(pNewFrame);
-        }
+        });
 }
 
 bool Input::GetVideo(OUT std::shared_ptr<MediaFrame>& _pFrame, OUT size_t& _nQlen)
@@ -442,8 +398,6 @@ bool Input::GetVideo(OUT std::shared_ptr<MediaFrame>& _pFrame, OUT size_t& _nQle
 
 bool Input::GetAudio(OUT std::shared_ptr<MediaFrame>& _pFrame, OUT size_t& _nQlen)
 {
-        // lock buffer and queue
-        std::lock_guard<std::mutex> lock(sampleBufferLck_);
         //size_t nSizeEachFrame = AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * av_get_bytes_per_sample(AudioResampler::SAMPLE_FMT);
 
         bool bOk = audioQ_.TryPop(_pFrame);

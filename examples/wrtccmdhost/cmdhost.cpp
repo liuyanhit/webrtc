@@ -473,7 +473,7 @@ public:
     }
 
     void Start() {
-        auto emit = [this] {
+        auto gen_video = [this] {
             int ts_ms = 0;
             while (exit_.load() == false) {
                 std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
@@ -506,17 +506,49 @@ public:
                 ts_ms += int(sleep_s*1e3);
             }
         };
-        thread_ = std::thread(emit);
+        video_thread_ = std::thread(gen_video);
+
+        auto gen_audio = [this] {
+            int ts_ms = 0;
+            auto sample_rate = 44100;
+            double dur = 0.01;
+            auto nb_samples = (int)((double)sample_rate*dur);
+            while (exit_.load() == false) {
+                std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
+                frame->Stream(muxer::STREAM_AUDIO);
+                frame->Codec(muxer::CODEC_AAC);
+
+                auto avframe = frame->AvFrame();
+                avframe->format = AV_SAMPLE_FMT_S16;
+                avframe->channel_layout = AV_CH_LAYOUT_MONO;
+                avframe->sample_rate = sample_rate;
+                avframe->channels = 2;
+                avframe->nb_samples = nb_samples;
+                avframe->pts = ts_ms;
+                av_frame_get_buffer(avframe, 0);
+                memset(avframe->data[0], 0, avframe->linesize[0]);
+
+                SendFrame(frame);
+
+                usleep((useconds_t)(dur*1e6));
+                ts_ms += int(dur*1e3);
+            }
+        };
+        audio_thread_ = std::thread(gen_audio);
     }
 
     void Stop() {
         exit_.store(true);
-        if (thread_.joinable()) {
-            thread_.join();
+        if (video_thread_.joinable()) {
+            video_thread_.join();
+        }
+        if (audio_thread_.joinable()) {
+            audio_thread_.join();
         }
     }
 
-    std::thread thread_;
+    std::thread video_thread_;
+    std::thread audio_thread_;
     std::atomic<bool> exit_;
     std::atomic<int> fps_;
     std::atomic<int> w_;

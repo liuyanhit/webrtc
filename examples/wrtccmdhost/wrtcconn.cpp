@@ -11,7 +11,7 @@
 
 class WRTCStream: public Stream, rtc::VideoSinkInterface<webrtc::VideoFrame>, webrtc::AudioTrackSinkInterface {
 public:
-    WRTCStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
+    WRTCStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream, const std::string& id) : id_(id) {
         webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
         webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
         if (!vtracks.empty()) {
@@ -24,14 +24,16 @@ public:
             Info("AddAudioSink");
             track->AddSink(this);
         }
+
+        start_ts_ = std::chrono::high_resolution_clock::now();
+        audio_ts_ = start_ts_;
     }
 
     void OnFrame(const webrtc::VideoFrame& rtcframe) {
-        if (firstts_us == -1) {
-            firstts_us = rtcframe.timestamp_us();
-        }
-        auto ts_us = rtcframe.timestamp_us() - firstts_us;
-        //Info("OnFrameVideo ts=%lld", ts_us);
+        auto now = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::ratio<1,1>> elapsed_d(now - start_ts_);
+
+        Info("[%s] OnFrameVideo ts=%lf", id_.c_str(), elapsed_d.count());
 
         std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
         frame->Stream(muxer::STREAM_VIDEO);
@@ -39,7 +41,7 @@ public:
         frame->AvFrame()->format = AV_PIX_FMT_YUV420P;
         frame->AvFrame()->height = rtcframe.height();
         frame->AvFrame()->width = rtcframe.width();
-        frame->AvFrame()->pts = ts_us / 1000;
+        frame->AvFrame()->pts = int(elapsed_d.count()*1000);
         av_frame_get_buffer(frame->AvFrame(), 32);
 
         auto rtcfb = rtcframe.video_frame_buffer();
@@ -76,9 +78,22 @@ public:
         size_t number_of_channels,
         size_t number_of_frames) 
     {
-        //Info("OnFrameAudio %zu %d %d %zu", number_of_frames, sample_rate, bits_per_sample, number_of_channels);
+        auto now = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::ratio<1,1>> diff_d(now - audio_ts_);
+        if (diff_d.count() > 0.2) {
+            //audio_ts_ = now;
+        }
+        std::chrono::duration<double, std::ratio<1,1>> elapsed_d(audio_ts_ - start_ts_);
+        std::chrono::nanoseconds inc((long long)(1e9 / (double)sample_rate * (double)number_of_frames));
+        audio_ts_ += inc;
 
-        auto frame = std::make_shared<muxer::MediaFrame>();
+        std::chrono::duration<double, std::ratio<1,1>> elapsed2_d(now - start_ts_);
+
+        Info("[%s] OnFrameAudio %zu %d %d %zu ts=%lf ts2=%lf",
+            id_.c_str(), number_of_frames, sample_rate, bits_per_sample, number_of_channels,
+            elapsed_d.count(), elapsed2_d.count());
+
+        std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
         frame->Stream(muxer::STREAM_AUDIO);
         frame->Codec(muxer::CODEC_AAC);
         frame->AvFrame()->format = AV_SAMPLE_FMT_S16;
@@ -86,15 +101,18 @@ public:
         frame->AvFrame()->sample_rate = sample_rate;
         frame->AvFrame()->channels = number_of_channels;
         frame->AvFrame()->nb_samples = number_of_frames;
+        frame->AvFrame()->pts = int(elapsed_d.count()*1000);
         av_frame_get_buffer(frame->AvFrame(), 0);
 
         memcpy(frame->AvFrame()->data[0], audio_data, bits_per_sample/8*number_of_frames);
+        
         SendFrame(frame);
 
         DebugPCM("/tmp/rtc.orig.s16", audio_data, bits_per_sample/8*number_of_frames);
     }
 
-    int64_t firstts_us = -1;
+    std::chrono::high_resolution_clock::time_point start_ts_, audio_ts_;
+    std::string id_;
 };
 
 class PeerConnectionObserver: public webrtc::PeerConnectionObserver {
@@ -106,9 +124,9 @@ public:
     void OnAddStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
         webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
         webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
-        Info("OnAddStream thread=%p vtracks=%lu atracks=%lu id=%s", rtc::Thread::Current(), vtracks.size(), atracks.size(), stream->label().c_str());
+        Info("OnAddStream pc=%s vtracks=%lu atracks=%lu id=%s", id_.c_str(), vtracks.size(), atracks.size(), stream->label().c_str());
 
-        conn_observer_->OnAddStream(id_, stream->label(), new WRTCStream(stream));
+        conn_observer_->OnAddStream(id_, stream->label(), new WRTCStream(stream, stream->label()));
     }
     void OnAddTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver, 
             const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>& streams) 
@@ -261,42 +279,104 @@ bool WRTCConn::AddIceCandidate(webrtc::IceCandidateInterface* candidate) {
     return pc_->AddIceCandidate(candidate);
 }
 
-class VideoBroadcasterStreamSink: public SinkObserver {
+class AudioBroadcaster: public webrtc::AudioSourceInterface {
 public:
-    VideoBroadcasterStreamSink(rtc::VideoBroadcaster *source) : source_(source) {}
+    void AddSink(webrtc::AudioTrackSinkInterface* sink) {
+        std::lock_guard<std::mutex> lock(sinks_lock_);
+        auto it = std::find_if(
+            sinks_.begin(), sinks_.end(),
+            [sink](webrtc::AudioTrackSinkInterface* i) -> bool { return i == sink; });
+        if (it != sinks_.end()) {
+            return;
+        }
+        sinks_.push_back(sink);
+    }
+
+    void RemoveSink(webrtc::AudioTrackSinkInterface* sink) {
+        std::lock_guard<std::mutex> lock(sinks_lock_);
+        sinks_.erase(std::remove_if(sinks_.begin(), sinks_.end(),
+                                    [sink](webrtc::AudioTrackSinkInterface* i) -> bool {
+                                        return i == sink;
+                                    }), sinks_.end());
+    }
+
+    void OnData(const void* audio_data,
+                      int bits_per_sample,
+                      int sample_rate,
+                      size_t number_of_channels,
+                      size_t number_of_frames) 
+    {
+        std::lock_guard<std::mutex> lock(sinks_lock_);
+        for (auto sink: sinks_) {
+            sink->OnData(audio_data, bits_per_sample, sample_rate, number_of_channels, number_of_frames);
+        }
+    }
+
+    void RegisterObserver(webrtc::ObserverInterface* observer) {
+    }
+
+    void UnregisterObserver(webrtc::ObserverInterface* observer) {
+    }
+
+    webrtc::MediaSourceInterface::SourceState state() const {
+        return webrtc::MediaSourceInterface::kLive;
+    }
+
+    bool remote() const {
+        return true;
+    }
+
+    std::mutex sinks_lock_;
+    std::vector<webrtc::AudioTrackSinkInterface*> sinks_;
+};
+
+class AVBroadcasterStreamSink: public SinkObserver {
+public:
+    AVBroadcasterStreamSink(rtc::VideoBroadcaster *vsrc, AudioBroadcaster* asrc) : vsrc_(vsrc), asrc_(asrc) {}
 
     void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
         AVFrame* avframe = frame->AvFrame();
 
-        rtc::scoped_refptr<webrtc::I420Buffer> buffer(
-            webrtc::I420Buffer::Create(avframe->width, avframe->height)
-        );
-        buffer->InitializeData();
+        if (frame->Stream() == muxer::STREAM_VIDEO) {
+            rtc::scoped_refptr<webrtc::I420Buffer> buffer(
+                webrtc::I420Buffer::Create(avframe->width, avframe->height)
+            );
+            buffer->InitializeData();
 
-        const uint8_t* data_y = avframe->data[0];
-        const uint8_t* data_u = avframe->data[1];
-        const uint8_t* data_v = avframe->data[2];
+            const uint8_t* data_y = avframe->data[0];
+            const uint8_t* data_u = avframe->data[1];
+            const uint8_t* data_v = avframe->data[2];
 
-        yuv::CopyLine(buffer->MutableDataY(), buffer->StrideY(), data_y,
-                      avframe->linesize[0], avframe->height);
-        yuv::CopyLine(buffer->MutableDataU(), buffer->StrideU(), data_u,
-                      avframe->linesize[1], avframe->height / 2);
-        yuv::CopyLine(buffer->MutableDataV(), buffer->StrideV(), data_v,
-                      avframe->linesize[2], avframe->height / 2);
+            yuv::CopyLine(buffer->MutableDataY(), buffer->StrideY(), data_y,
+                        avframe->linesize[0], avframe->height);
+            yuv::CopyLine(buffer->MutableDataU(), buffer->StrideU(), data_u,
+                        avframe->linesize[1], avframe->height / 2);
+            yuv::CopyLine(buffer->MutableDataV(), buffer->StrideV(), data_v,
+                        avframe->linesize[2], avframe->height / 2);
 
-        source_->OnFrame(webrtc::VideoFrame(buffer, webrtc::kVideoRotation_0,
-                                            0 / rtc::kNumNanosecsPerMicrosec));
+            vsrc_->OnFrame(webrtc::VideoFrame(buffer, webrtc::kVideoRotation_0,
+                                                0 / rtc::kNumNanosecsPerMicrosec));
+        } else {
+            if (!av_sample_fmt_is_planar((AVSampleFormat)avframe->format)) {
+                auto bits_per_sample = av_get_bytes_per_sample((AVSampleFormat)avframe->format)*8;
+                asrc_->OnData(avframe->data[0], bits_per_sample, avframe->sample_rate, avframe->channels, avframe->nb_samples);
+            }
+        }
     }
 
-    rtc::VideoBroadcaster *source_;
+    rtc::VideoBroadcaster* vsrc_;
+    AudioBroadcaster* asrc_;
 };
 
 bool WRTCConn::AddStream(SinkAddRemover* stream) {
     auto media_stream = pc_factory_->CreateLocalMediaStream(newReqId());
-    rtc::VideoBroadcaster *source = new rtc::VideoBroadcaster();
-    webrtc::VideoTrackSource *track_source = new rtc::RefCountedObject<webrtc::VideoTrackSource>(source, false);
-    auto track = pc_factory_->CreateVideoTrack(newReqId(), track_source);
-    media_stream->AddTrack(track);
-    stream->AddSink(newReqId(), new VideoBroadcasterStreamSink(source));
+    auto asrc = new rtc::RefCountedObject<AudioBroadcaster>();
+    rtc::VideoBroadcaster *vsrc = new rtc::VideoBroadcaster();
+    webrtc::VideoTrackSource *vtrksrc = new rtc::RefCountedObject<webrtc::VideoTrackSource>(vsrc, false);
+    auto vtrk = pc_factory_->CreateVideoTrack(newReqId(), vtrksrc);
+    auto atrk = pc_factory_->CreateAudioTrack(newReqId(), asrc);
+    media_stream->AddTrack(vtrk);
+    media_stream->AddTrack(atrk);
+    stream->AddSink(newReqId(), new AVBroadcasterStreamSink(vsrc, asrc));
     return pc_->AddStream(media_stream);
 }

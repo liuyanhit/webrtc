@@ -25,6 +25,7 @@ bool Stream::RemoveSink(const std::string& id) {
 
 void Stream::SendFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
     std::lock_guard<std::mutex> lock(sinks_map_lock_);
+
     for (auto it = sinks_map_.begin(); it != sinks_map_.end(); it++) {
         auto sink = it->second;
         sink->OnFrame(frame);

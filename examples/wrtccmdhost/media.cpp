@@ -12,6 +12,8 @@ const int AudioResampler::FRAME_SIZE;
 
 AudioResampler::AudioResampler()
 {
+        sampleBuffer_.reserve(AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * 2 * 4);
+        sampleBuffer_.resize(0);
 }
 
 AudioResampler::~AudioResampler()
@@ -59,6 +61,49 @@ int AudioResampler::Reset()
         if (pSwr_ != nullptr) {
                 swr_free(&pSwr_);
                 pSwr_ = nullptr;
+        }
+
+        return 0;
+}
+
+int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pFrame, std::function<void (const std::shared_ptr<MediaFrame>& out)> callback) {
+        size_t nBufSize = sampleBuffer_.size();
+        std::vector<uint8_t> buffer;
+
+        // resample to the same audio format
+        if (Resample(_pFrame, buffer) != 0) {
+                return -1;
+        }
+
+        // save resampled data in audio buffer
+        sampleBuffer_.resize(sampleBuffer_.size() + buffer.size());
+        std::copy(buffer.begin(), buffer.end(), &sampleBuffer_[nBufSize]);
+
+        // if the buffer size meets the min requirement of encoding one frame, build a frame and push upon audio queue
+        size_t nSizeEachFrame = AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * av_get_bytes_per_sample(AudioResampler::SAMPLE_FMT);
+
+        //Info("resample %lu %lu %lu %p", buffer.size(), sampleBuffer_.size(), nSizeEachFrame, &sampleBuffer_);
+
+        while (sampleBuffer_.size() >= nSizeEachFrame) {
+                auto pNewFrame = std::make_shared<MediaFrame>();
+                pNewFrame->Stream(_pFrame->Stream());
+                pNewFrame->Codec(_pFrame->Codec());
+                av_frame_copy_props(pNewFrame->AvFrame(), _pFrame->AvFrame());
+                pNewFrame->AvFrame()->nb_samples = AudioResampler::FRAME_SIZE;
+                pNewFrame->AvFrame()->format = AudioResampler::SAMPLE_FMT;
+                pNewFrame->AvFrame()->channels = AudioResampler::CHANNELS;
+                pNewFrame->AvFrame()->channel_layout = AudioResampler::CHANNEL_LAYOUT;
+                pNewFrame->AvFrame()->sample_rate = AudioResampler::SAMPLE_RATE;
+                av_frame_get_buffer(pNewFrame->AvFrame(), 0);
+                std::copy(&sampleBuffer_[0], &sampleBuffer_[nSizeEachFrame], pNewFrame->AvFrame()->data[0]);
+        
+                DebugPCM("/tmp/rtc.re2.s16", &sampleBuffer_[0], nSizeEachFrame);
+
+                // move rest samples to beginning of the buffer
+                std::copy(&sampleBuffer_[nSizeEachFrame], &sampleBuffer_[sampleBuffer_.size()], sampleBuffer_.begin());
+                sampleBuffer_.resize(sampleBuffer_.size() - nSizeEachFrame);
+
+                callback(pNewFrame);
         }
 
         return 0;

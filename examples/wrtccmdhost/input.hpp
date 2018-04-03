@@ -70,8 +70,6 @@ namespace muxer
                 SharedQueue<std::shared_ptr<MediaFrame>> audioQ_;
 
                 AudioResampler resampler_;
-                std::vector<uint8_t> sampleBuffer_;
-                std::mutex sampleBufferLck_;
 
                 std::shared_ptr<VideoRescaler> pRescaler_ = nullptr;
 

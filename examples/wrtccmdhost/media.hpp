@@ -19,12 +19,14 @@ namespace muxer
                 AudioResampler();
                 ~AudioResampler();
                 int Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OUT std::vector<uint8_t>& buffer);
+                int Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, std::function<void (const std::shared_ptr<MediaFrame>& out)> callback);
         private:
                 int Init(IN const std::shared_ptr<MediaFrame>& pFrame);
                 int Reset();
         private:
                 SwrContext* pSwr_ = nullptr; // for resampling
                 int nOrigSamplerate_, nOrigChannels_, nOrigForamt_;
+                std::vector<uint8_t> sampleBuffer_;
         };
 
         class VideoRescaler

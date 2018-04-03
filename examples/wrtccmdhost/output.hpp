@@ -219,6 +219,7 @@ namespace muxer
                 std::thread sender_;
                 std::atomic<bool> bSenderExit_;
                 SharedQueue<std::shared_ptr<MediaFrame>> muxedQ_;
+                AudioResampler resampler_;
         };
 
         class Output : public OptionMap
