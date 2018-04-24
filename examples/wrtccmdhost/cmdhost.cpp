@@ -510,9 +510,11 @@ public:
 
         auto gen_audio = [this] {
             int ts_ms = 0;
-            auto sample_rate = 44100;
+            auto sample_rate = 8000;
             double dur = 0.01;
             auto nb_samples = (int)((double)sample_rate*dur);
+            double sint = 0.0;
+
             while (exit_.load() == false) {
                 std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
                 frame->Stream(muxer::STREAM_AUDIO);
@@ -522,15 +524,20 @@ public:
                 avframe->format = AV_SAMPLE_FMT_S16;
                 avframe->channel_layout = AV_CH_LAYOUT_MONO;
                 avframe->sample_rate = sample_rate;
-                avframe->channels = 2;
                 avframe->nb_samples = nb_samples;
                 avframe->pts = ts_ms;
                 av_frame_get_buffer(avframe, 0);
-                memset(avframe->data[0], 0, avframe->linesize[0]);
+
+                int16_t *p = (int16_t*)avframe->data[0];
+                for (int i = 0; i < nb_samples; i++) {
+                    p[i] = (int16_t)(sin(sint*2*M_PI*440)*0x7fff);
+                    sint += 1.0/(double)sample_rate;
+                }
+                //memset(avframe->data[0], 0, avframe->linesize[0]);
 
                 SendFrame(frame);
 
-                usleep((useconds_t)(dur*1e6));
+                usleep((useconds_t)(dur*0.5*1e6));
                 ts_ms += int(dur*1e3);
             }
         };

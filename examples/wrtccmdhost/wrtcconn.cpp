@@ -307,6 +307,12 @@ public:
                       size_t number_of_frames) 
     {
         std::lock_guard<std::mutex> lock(sinks_lock_);
+
+        Debug("AudioBroadcaster %zu %d %d %zu sinks=%zu",
+            number_of_frames, sample_rate, bits_per_sample, number_of_channels, sinks_.size());
+
+        DebugPCM("/tmp/rtc.src.orig.s16", audio_data, bits_per_sample/8*number_of_frames);
+
         for (auto sink: sinks_) {
             sink->OnData(audio_data, bits_per_sample, sample_rate, number_of_channels, number_of_frames);
         }

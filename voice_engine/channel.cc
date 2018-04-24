@@ -1370,6 +1370,11 @@ void Channel::ProcessAndEncodeAudio(const AudioFrame& audio_input) {
   // Profile time between when the audio frame is added to the task queue and
   // when the task is actually executed.
   audio_frame->UpdateProfileTimeStamp();
+  fprintf(stderr, "Channel::ProcessAndEncodeAudio p=%p PostTask2 samples_per_channel_=%zu sample_rate_hz_=%d num_channels_=%zu\n",
+      this, audio_frame->samples_per_channel_,
+      audio_frame->sample_rate_hz_,
+      audio_frame->num_channels_
+  );
   encoder_queue_->PostTask(std::unique_ptr<rtc::QueuedTask>(
       new ProcessAndEncodeAudioTask(std::move(audio_frame), this)));
 }
@@ -1378,6 +1383,19 @@ void Channel::ProcessAndEncodeAudio(const int16_t* audio_data,
                                     int sample_rate,
                                     size_t number_of_frames,
                                     size_t number_of_channels) {
+  fprintf(stderr, "Channel::ProcessAndEncodeAudio p=%p audio_data=%p number_of_frames=%zu number_of_channels=%zu\n",
+    this, audio_data, number_of_frames, number_of_channels);
+#define DebugPCM(filename, p, len) { \
+        static FILE *fp; \
+        if (fp == NULL) { \
+                fp = fopen(filename, "wb+"); \
+        } \
+        fwrite(p, len, 1, fp); \
+        fflush(fp); \
+}
+  DebugPCM("/tmp/rtc.voeondata3.s16", audio_data, number_of_frames*number_of_channels);
+#undef DebugPCM
+
   // Avoid posting as new task if sending was already stopped in StopSend().
   rtc::CritScope cs(&encoder_queue_lock_);
   if (!encoder_queue_is_active_) {
@@ -1398,11 +1416,33 @@ void Channel::ProcessAndEncodeAudio(const int16_t* audio_data,
   }
   RemixAndResample(audio_data, number_of_frames, number_of_channels,
                    sample_rate, &input_resampler_, audio_frame.get());
+  
+  fprintf(stderr, "Channel::ProcessAndEncodeAudio p=%p PostTask samples_per_channel_=%zu sample_rate_hz_=%d num_channels_=%zu\n",
+      this, audio_frame->samples_per_channel_,
+      audio_frame->sample_rate_hz_,
+      audio_frame->num_channels_
+  );
   encoder_queue_->PostTask(std::unique_ptr<rtc::QueuedTask>(
       new ProcessAndEncodeAudioTask(std::move(audio_frame), this)));
 }
 
 void Channel::ProcessAndEncodeAudioOnTaskQueue(AudioFrame* audio_input) {
+    fprintf(stderr, "Channel::ProcessAndEncodeAudioOnTaskQueue p=%p samples_per_channel_=%zu sample_rate_hz_=%d num_channels_=%zu\n",
+      this, audio_input->samples_per_channel_,
+      audio_input->sample_rate_hz_,
+      audio_input->num_channels_
+      );
+#define DebugPCM(filename, p, len) { \
+        static FILE *fp; \
+        if (fp == NULL) { \
+                fp = fopen(filename, "wb+"); \
+        } \
+        fwrite(p, len, 1, fp); \
+        fflush(fp); \
+}
+DebugPCM("/tmp/rtc.voeondata4.s16", audio_input->data(), audio_input->samples_per_channel_ * audio_input->num_channels_);
+#undef DebugPCM
+
   RTC_DCHECK_RUN_ON(encoder_queue_);
   RTC_DCHECK_GT(audio_input->samples_per_channel_, 0);
   RTC_DCHECK_LE(audio_input->num_channels_, 2);

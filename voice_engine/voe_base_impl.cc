@@ -91,7 +91,7 @@ int32_t VoEBaseImpl::RecordedDataIsAvailable(
   // Copy the audio frame to each sending channel and perform
   // channel-dependent operations (file mixing, mute, etc.), encode and
   // packetize+transmit the RTP packet.
-  shared_->transmit_mixer()->ProcessAndEncodeAudio();
+  //shared_->transmit_mixer()->ProcessAndEncodeAudio();
 
   // Scale from VoE to ADM level range.
   uint32_t new_voe_mic_level = shared_->transmit_mixer()->CaptureLevel();
@@ -121,6 +121,18 @@ void VoEBaseImpl::PushCaptureData(int voe_channel, const void* audio_data,
                                   int bits_per_sample, int sample_rate,
                                   size_t number_of_channels,
                                   size_t number_of_frames) {
+    fprintf(stderr, "VoEBaseImpl::PushCaptureData voe_audio_transport_=%p audio_data=%p\n", this->audio_transport(), audio_data);
+#define DebugPCM(filename, p, len) { \
+        static FILE *fp; \
+        if (fp == NULL) { \
+                fp = fopen(filename, "wb+"); \
+        } \
+        fwrite(p, len, 1, fp); \
+        fflush(fp); \
+}
+DebugPCM("/tmp/rtc.voeondata2.s16", audio_data, bits_per_sample/8*number_of_frames);
+#undef DebugPCM
+
   voe::ChannelOwner ch = shared_->channel_manager().GetChannel(voe_channel);
   voe::Channel* channel = ch.channel();
   if (!channel)

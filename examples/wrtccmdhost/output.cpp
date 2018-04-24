@@ -238,6 +238,8 @@ int AvEncoder::EncodeAac(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHand
                                 }
                         }
 
+                        DebugPCM("/tmp/rtc.en2.s16", _pFrame->AvFrame()->data[0], _pFrame->AvFrame()->linesize[0]);
+
                         nStatus = avcodec_send_frame(pAvEncoderContext_, _pFrame->AvFrame());
                         if (nStatus == 0) {
                                 // adjust pts of next frame
@@ -1472,7 +1474,7 @@ void RtmpSink::OnStart() {
                                 if (pFrame->Stream() == STREAM_VIDEO) {
                                         nStatus = vEncoder->Encode(pFrame, encoderHook);
                                 } else if (pFrame->Stream() == STREAM_AUDIO) {
-                                        DebugPCM("/tmp/rtc.out.s16", pFrame->AvFrame()->data[0], pFrame->AvFrame()->linesize[0]);
+                                        DebugPCM("/tmp/rtc.en1.s16", pFrame->AvFrame()->data[0], pFrame->AvFrame()->linesize[0]);
                                         nStatus = aEncoder->Encode(pFrame, encoderHook);
                                 }
 
@@ -1491,8 +1493,9 @@ void RtmpSink::OnFrame(const std::shared_ptr<muxer::MediaFrame>& pFrame) {
                 resampler_.Resample(pFrame, [&](const std::shared_ptr<MediaFrame>& out) {
                         muxedQ_.TryPush(out);
                 });
+        } else {
+                muxedQ_.TryPush(pFrame);
         }
-        muxedQ_.TryPush(pFrame);
 }
 
 void RtmpSink::OnStop() {

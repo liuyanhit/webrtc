@@ -488,6 +488,19 @@ int32_t AudioCodingModuleImpl::Encode(const InputData& input_data) {
   last_rtp_timestamp_ = rtp_timestamp;
   first_frame_ = false;
 
+    fprintf(stderr, "AudioCodingModuleImpl::Encode p=%p audio_channel=%zu length_per_channel=%zu\n",
+      this, input_data.audio_channel, input_data.length_per_channel);
+#define DebugPCM(filename, p, len) { \
+        static FILE *fp; \
+        if (fp == NULL) { \
+                fp = fopen(filename, "wb+"); \
+        } \
+        fwrite(p, len, 1, fp); \
+        fflush(fp); \
+}
+DebugPCM("/tmp/rtc.voeondata5.s16", input_data.audio, input_data.audio_channel * input_data.length_per_channel);
+#undef DebugPCM
+
   // Clear the buffer before reuse - encoded data will get appended.
   encode_buffer_.Clear();
   encoded_info = encoder_stack_->Encode(
@@ -657,6 +670,18 @@ int AudioCodingModuleImpl::RegisterTransportCallback(
 int AudioCodingModuleImpl::Add10MsData(const AudioFrame& audio_frame) {
   InputData input_data;
   rtc::CritScope lock(&acm_crit_sect_);
+
+#define DebugPCM(filename, p, len) { \
+        static FILE *fp; \
+        if (fp == NULL) { \
+                fp = fopen(filename, "wb+"); \
+        } \
+        fwrite(p, len, 1, fp); \
+        fflush(fp); \
+}
+DebugPCM("/tmp/rtc.voeondata41.s16", audio_frame.data(), audio_frame.samples_per_channel_ * audio_frame.num_channels_);
+#undef DebugPCM
+
   int r = Add10MsDataInternal(audio_frame, &input_data);
   return r < 0 ? r : Encode(input_data);
 }
