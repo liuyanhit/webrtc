@@ -881,22 +881,28 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                 url_ = url;
 
                 Info("rtmp: connecting to %s...", url_.c_str());
+                const int sleeptime = 1;
+
                 if (RTMP_SetupURL(pRtmp_, const_cast<char*>(url_.c_str())) == 0) {
                         Error("rtmp: setup URL");
+                        sleep(sleeptime);
                         return -1;
                 }
                 RTMP_EnableWrite(pRtmp_);
                 if (RTMP_Connect(pRtmp_, nullptr) == 0) {
                         Error("rtmp: connect");
+                        sleep(sleeptime);
                         return -1;
                 }
                 if (RTMP_ConnectStream(pRtmp_, 0) == 0) {
                         Error("rtmp: connect stream");
+                        sleep(sleeptime);
                         return -1;
                 }
 
                 if (SendChunkSize(4096) < 0) {
                         Error("rtmp: chunk size not sent");
+                        sleep(sleeptime);
                         return -1;
                 }
 
