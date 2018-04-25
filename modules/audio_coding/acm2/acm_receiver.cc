@@ -129,22 +129,6 @@ int AcmReceiver::GetAudio(int desired_freq_hz,
     return -1;
   }
 
-   fprintf(stderr, "AcmReceiver::GetAudio p=%p samples_per_channel_=%zu sample_rate_hz_=%d num_channels_=%zu\n",
-      this, audio_frame->samples_per_channel_,
-      audio_frame->sample_rate_hz_,
-      audio_frame->num_channels_
-      );
-#define DebugPCM(filename, p, len) { \
-        static FILE *fp; \
-        if (fp == NULL) { \
-                fp = fopen(filename, "wb+"); \
-        } \
-        fwrite(p, len, 1, fp); \
-        fflush(fp); \
-}
-DebugPCM("/tmp/rtc.recv.acm.s16", audio_frame->data(), audio_frame->samples_per_channel_ * audio_frame->num_channels_);
-#undef DebugPCM
-
   const int current_sample_rate_hz = neteq_->last_output_sample_rate_hz();
 
   // Update if resampling is required.

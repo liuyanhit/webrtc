@@ -960,17 +960,6 @@ class WebRtcVoiceMediaChannel::WebRtcAudioSendStream
               int sample_rate,
               size_t number_of_channels,
               size_t number_of_frames) override {
-    fprintf(stderr, "voe::Encode voe_audio_transport_=%p audio_data=%p\n", voe_audio_transport_, audio_data);
-#define DebugPCM(filename, p, len) { \
-        static FILE *fp; \
-        if (fp == NULL) { \
-                fp = fopen(filename, "wb+"); \
-        } \
-        fwrite(p, len, 1, fp); \
-        fflush(fp); \
-}
-DebugPCM("/tmp/rtc.voeondata.s16", audio_data, bits_per_sample/8*number_of_frames);
-#undef DebugPCM
     RTC_CHECK_RUNS_SERIALIZED(&audio_capture_race_checker_);
     RTC_DCHECK(voe_audio_transport_);
     voe_audio_transport_->PushCaptureData(config_.voe_channel_id, audio_data,
