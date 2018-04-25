@@ -320,6 +320,13 @@ static inline int jsonAsInt(const Json::Value& v) {
     return v.asInt();
 }
 
+static inline bool jsonAsBool(const Json::Value& v) {
+    if (!v.isBool()) {
+        return false;
+    }
+    return v.asBool();
+}
+
 static inline int fpwrite(FILE *fp, void *buf, size_t len) {
         return fwrite(buf, 1, len, fp) != len ? -1 : 0;
 }

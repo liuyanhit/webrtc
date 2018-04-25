@@ -71,7 +71,7 @@ extern "C"
                         if (reqid != NULL) \
                                 sprintf(reqstr, "[%s]", (char *)reqid);         \
                         gettimeofday(&tv, nullptr);                     \
-                        strftime(timeFmt, sizeof(timeFmt), "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec)); \
+                        strftime(timeFmt, sizeof(timeFmt), "%Y/%m/%d %H:%M:%S", localtime(&tv.tv_sec)); \
                         fprintf(stderr, "%s.%06lu %s[%s] %s:%d: " fmt "\n",     \
                                 timeFmt, (unsigned long)(tv.tv_usec / 1000), reqstr, levelstr, __FILE__, __LINE__, ##arg); \
                 }                                                       \
