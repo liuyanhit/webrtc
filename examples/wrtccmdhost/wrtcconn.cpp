@@ -16,12 +16,12 @@ public:
         webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
         if (!vtracks.empty()) {
             webrtc::VideoTrackInterface* track = vtracks[0];
-            Info("AddVideoTrackSink state=%d enabled=%d", track->state(), track->enabled());
+            DebugR("AddVideoTrackSink state=%d enabled=%d", id.c_str(), track->state(), track->enabled());
             track->AddOrUpdateSink(this, rtc::VideoSinkWants());
         }
         if (!atracks.empty()) {
             webrtc::AudioTrackInterface *track = atracks[0];
-            Info("AddAudioSink");
+            DebugR("AddAudioSink", id.c_str());
             track->AddSink(this);
         }
 
@@ -33,7 +33,7 @@ public:
         auto now = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::ratio<1,1>> elapsed_d(now - start_ts_);
 
-        Info("[%s] OnFrameVideo ts=%lf", id_.c_str(), elapsed_d.count());
+        DebugR("OnFrameVideo ts=%lf", id_.c_str(), elapsed_d.count());
 
         std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
         frame->Stream(muxer::STREAM_VIDEO);
@@ -89,7 +89,7 @@ public:
 
         std::chrono::duration<double, std::ratio<1,1>> elapsed2_d(now - start_ts_);
 
-        Info("[%s] OnFrameAudio %zu %d %d %zu ts=%lf ts2=%lf",
+        DebugR("OnFrameAudio %zu %d %d %zu ts=%lf ts2=%lf",
             id_.c_str(), number_of_frames, sample_rate, bits_per_sample, number_of_channels,
             elapsed_d.count(), elapsed2_d.count());
 
@@ -124,7 +124,7 @@ public:
     void OnAddStream(rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) {
         webrtc::VideoTrackVector vtracks = stream->GetVideoTracks();
         webrtc::AudioTrackVector atracks = stream->GetAudioTracks();
-        Info("OnAddStream pc=%s vtracks=%lu atracks=%lu id=%s", id_.c_str(), vtracks.size(), atracks.size(), stream->label().c_str());
+        InfoR("OnAddStream vtracks=%lu atracks=%lu id=%s", id_.c_str(), vtracks.size(), atracks.size(), stream->label().c_str());
 
         conn_observer_->OnAddStream(id_, stream->label(), new WRTCStream(stream, stream->label()));
     }

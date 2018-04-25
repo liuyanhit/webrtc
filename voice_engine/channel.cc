@@ -1370,11 +1370,6 @@ void Channel::ProcessAndEncodeAudio(const AudioFrame& audio_input) {
   // Profile time between when the audio frame is added to the task queue and
   // when the task is actually executed.
   audio_frame->UpdateProfileTimeStamp();
-  fprintf(stderr, "Channel::ProcessAndEncodeAudio p=%p PostTask2 samples_per_channel_=%zu sample_rate_hz_=%d num_channels_=%zu\n",
-      this, audio_frame->samples_per_channel_,
-      audio_frame->sample_rate_hz_,
-      audio_frame->num_channels_
-  );
   encoder_queue_->PostTask(std::unique_ptr<rtc::QueuedTask>(
       new ProcessAndEncodeAudioTask(std::move(audio_frame), this)));
 }

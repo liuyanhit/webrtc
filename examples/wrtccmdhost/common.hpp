@@ -62,48 +62,61 @@ extern "C"
 #define INOUT
 #endif
 
-#define LogFormat(level, str, fmt, arg...)                              \
+#define LogFormat(level, levelstr, reqid, fmt, arg...)                              \
         do {                                                            \
                 if ((unsigned int)(level) <= muxer::global::nLogLevel) { \
                         struct timeval tv;                              \
                         char timeFmt[32];                               \
+                        char reqstr[128] = {};                           \
+                        if (reqid != NULL) \
+                                sprintf(reqstr, "[%s]", (char *)reqid);         \
                         gettimeofday(&tv, nullptr);                     \
                         strftime(timeFmt, sizeof(timeFmt), "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec)); \
-                        fprintf(stderr, "[%s] %s.%03lu: " fmt "\n",     \
-                                str, timeFmt, (unsigned long)(tv.tv_usec / 1000), ##arg); \
+                        fprintf(stderr, "%s.%06lu %s[%s] %s:%d: " fmt "\n",     \
+                                timeFmt, (unsigned long)(tv.tv_usec / 1000), reqstr, levelstr, __FILE__, __LINE__, ##arg); \
                 }                                                       \
         } while(0)
 
 #define Fatal(fmt, arg...)                                              \
         do {                                                            \
-                LogFormat(1, "F", fmt, ##arg);                          \
-                LogFormat(1, "F", "fatal error, will exit");            \
+                LogFormat(1, "FATAL", NULL, fmt, ##arg);                          \
+                LogFormat(1, "FATAL", NULL, "fatal error, will exit");            \
                 exit(1);                                                \
         } while(0)
 
 #define Error(fmt, arg...)                              \
         do {                                            \
-                LogFormat(2, "E", fmt, ##arg);          \
+                LogFormat(2, "ERROR", NULL, fmt, ##arg);          \
         } while(0)
 
 #define Warn(fmt, arg...)                               \
         do {                                            \
-                LogFormat(3, "W", fmt, ##arg);          \
+                LogFormat(3, "WARN", NULL, fmt, ##arg);          \
         } while(0)
 
 #define Info(fmt, arg...)                               \
         do {                                            \
-                LogFormat(4, "I", fmt, ##arg);          \
+                LogFormat(4, "INFO", NULL, fmt, ##arg);          \
+        } while(0)
+
+#define InfoR(fmt, reqid, arg...)                               \
+        do {                                            \
+                LogFormat(4, "INFO", reqid, fmt, ##arg);          \
         } while(0)
 
 #define Debug(fmt, arg...)                              \
         do {                                            \
-                LogFormat(5, "D", fmt, ##arg);          \
+                LogFormat(5, "DEBUG", NULL, fmt, ##arg);          \
+        } while(0)
+
+#define DebugR(fmt, reqid, arg...)                              \
+        do {                                            \
+                LogFormat(5, "DEBUG", reqid, fmt, ##arg);          \
         } while(0)
 
 #define Verbose(fmt, arg...)                            \
         do {                                            \
-                LogFormat(6, "V", fmt, ##arg);          \
+                LogFormat(6, "VERBOSE", NULL, fmt, ##arg);          \
         } while(0)
 
 namespace muxer
