@@ -54,7 +54,8 @@ int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callb
         Info("input URL: %s", _url.c_str());
         int nStatus = avformat_open_input(&pAvContext_, _url.c_str(), 0, 0);
         if (nStatus < 0) {
-                Error("could not open input stream: %s", _url.c_str());
+                Error("could not open input stream: %s, %s", av_err2str(nStatus), _url.c_str());
+                sleep(1);
                 return -1;
         }
 
@@ -64,9 +65,11 @@ int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callb
                 Error("could not get stream info");
                 return -1;
         }
-        std::vector<struct AVStream *> streams;
+
+        std::vector<AVStream *> streams;
         for (unsigned int i = 0; i < pAvContext_->nb_streams; i++) {
-                struct AVStream * pAvStream = pAvContext_->streams[i];
+                AVStream * pAvStream = pAvContext_->streams[i];
+
                 streams.push_back(pAvStream);
                 Info("stream is found: avstream=%d, avcodec=%d",
                      pAvStream->codecpar->codec_type, pAvStream->codecpar->codec_id);
@@ -277,6 +280,15 @@ void Input::Start(IN const std::string& _url)
                                         if (bReceiverExit_.load() == true) {
                                                 return -1;
                                         }
+
+                                        if (this->nativeRate_) {
+                                                auto diff = _pFrame->AvFrame()->pts - this->lastpts_;
+                                                if (diff > 0) {
+                                                        usleep(1000*diff);
+                                                }
+                                                this->lastpts_ = _pFrame->AvFrame()->pts;
+                                        }
+                                        SendFrame(_pFrame);
 
                                         // format video/audio data
                                         if (_pFrame->Stream() == STREAM_VIDEO) {

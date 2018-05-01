@@ -33,6 +33,7 @@ const std::string mtLibmuxerSetInputsOpt = "libmuxer-set-inputs-opt";
 const std::string mtLibmuxerRemoveInput = "libmuxer-remove-input";
 const std::string mtStreamAddSink = "stream-add-sink";
 const std::string mtNewCanvasStream = "new-canvas-stream";
+const std::string mtNewUrlStream = "new-url-stream";
 const std::string mtConnAddStream = "conn-add-stream";
 
 static void parseOfferAnswerOpt(const Json::Value& v, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions& opt) {
@@ -567,6 +568,23 @@ public:
     std::atomic<uint32_t> bg_;
 };
 
+void CmdHost::handleNewUrlStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    auto url = jsonAsString(req["url"]);
+
+    muxer::Input* input = new muxer::Input("");
+    input->nativeRate_ = true;
+    input->Start(url);
+
+    auto stream_id = newReqId();
+    {
+        std::lock_guard<std::mutex> lock(streams_map_lock_);
+        streams_map_[stream_id] = input;
+    }
+    Json::Value res;
+    res[kId] = stream_id;
+    observer->OnSuccess(res);    
+}
+
 void CmdHost::handleNewCanvasStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
     int fps = jsonAsInt(req["fps"]);
     int w = jsonAsInt(req["w"]);
@@ -664,6 +682,8 @@ void CmdHost::handleReq(rtc::scoped_refptr<MsgPump::Request> req) {
         handleNewCanvasStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtConnAddStream) {
         handleConnAddStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtNewUrlStream) {
+        handleNewUrlStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));       
     }
 }
 

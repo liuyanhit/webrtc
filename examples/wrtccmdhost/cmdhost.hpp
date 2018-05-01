@@ -59,6 +59,7 @@ public:
     void handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleNewCanvasStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
+    void handleNewUrlStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleConnAddStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer);
     void handleReq(rtc::scoped_refptr<MsgPump::Request> req);
     void handleMsg(const std::string& type, const Json::Value& body);

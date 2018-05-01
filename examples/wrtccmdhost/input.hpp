@@ -39,7 +39,7 @@ namespace muxer
         };
 
         // Input
-        class Input : public OptionMap
+        class Input : public OptionMap, public Stream
         {
         public:
                 Input(IN const std::string& name);
@@ -58,8 +58,10 @@ namespace muxer
                 // push one video/audio
                 void SetAudio(const std::shared_ptr<MediaFrame>& pFrame);
                 void SetVideo(const std::shared_ptr<MediaFrame>& pFrame);
+                bool nativeRate_ = false;
 
         private:
+                int64_t lastpts_ = 0;
                 static const size_t AUDIO_Q_LEN = 100;
                 static const size_t VIDEO_Q_LEN = 10;
                 std::string name_;
