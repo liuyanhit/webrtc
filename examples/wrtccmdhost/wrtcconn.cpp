@@ -35,21 +35,20 @@ public:
 
         DebugR("OnFrameVideo ts=%lf", id_.c_str(), elapsed_d.count());
 
+        auto rtcfb = rtcframe.video_frame_buffer();
+        auto i420 = rtcfb->ToI420();
+        if (rtcframe.rotation() != webrtc::kVideoRotation_0) {
+            i420 = webrtc::I420Buffer::Rotate(*i420, rtcframe.rotation());
+        }
+
         std::shared_ptr<muxer::MediaFrame> frame = std::make_shared<muxer::MediaFrame>();
         frame->Stream(muxer::STREAM_VIDEO);
         frame->Codec(muxer::CODEC_H264);
         frame->AvFrame()->format = AV_PIX_FMT_YUV420P;
-        frame->AvFrame()->height = rtcframe.height();
-        frame->AvFrame()->width = rtcframe.width();
+        frame->AvFrame()->height = i420->height();
+        frame->AvFrame()->width = i420->width();
         frame->AvFrame()->pts = int(elapsed_d.count()*1000);
         av_frame_get_buffer(frame->AvFrame(), 32);
-
-        auto rtcfb = rtcframe.video_frame_buffer();
-        auto i420 = rtcfb->ToI420();
-
-        if (rtcframe.rotation() != webrtc::kVideoRotation_0) {
-            i420 = webrtc::I420Buffer::Rotate(*i420, rtcframe.rotation());
-        }
 
         const uint8_t* rtcdata[3] = {
             i420->DataY(),
@@ -62,7 +61,7 @@ public:
             i420->StrideV(),
         };
         int height[3] = {
-            rtcframe.height(),
+            i420->height(),
             i420->ChromaHeight(),
             i420->ChromaHeight(),
         };
