@@ -442,6 +442,9 @@ void CmdHost::handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_ref
             }
         }
     }
+
+    Json::Value res;
+    observer->OnSuccess(res);
 }
 
 void CmdHost::handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {

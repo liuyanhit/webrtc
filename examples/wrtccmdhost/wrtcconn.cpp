@@ -47,6 +47,10 @@ public:
         auto rtcfb = rtcframe.video_frame_buffer();
         auto i420 = rtcfb->ToI420();
 
+        if (rtcframe.rotation() != webrtc::kVideoRotation_0) {
+            i420 = webrtc::I420Buffer::Rotate(*i420, rtcframe.rotation());
+        }
+
         const uint8_t* rtcdata[3] = {
             i420->DataY(),
             i420->DataU(),
