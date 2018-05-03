@@ -59,6 +59,9 @@ namespace muxer
                 void SetAudio(const std::shared_ptr<MediaFrame>& pFrame);
                 void SetVideo(const std::shared_ptr<MediaFrame>& pFrame);
                 bool nativeRate_ = false;
+                bool doRescale_ = true;
+                bool doResample_ = true;
+                AudioResampler resampler_;
 
         private:
                 int64_t lastpts_ = 0;
@@ -70,8 +73,6 @@ namespace muxer
                 std::shared_ptr<MediaFrame> pLastVideo_ = nullptr;
                 SharedQueue<std::shared_ptr<MediaFrame>> videoQ_;
                 SharedQueue<std::shared_ptr<MediaFrame>> audioQ_;
-
-                AudioResampler resampler_;
 
                 std::shared_ptr<VideoRescaler> pRescaler_ = nullptr;
 

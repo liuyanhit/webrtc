@@ -13,13 +13,15 @@ namespace muxer
                 static const int CHANNELS = 2;
                 static const AVSampleFormat SAMPLE_FMT = AV_SAMPLE_FMT_S16;
                 static const int CHANNEL_LAYOUT = AV_CH_LAYOUT_STEREO;
-                static const int FRAME_SIZE = 1024;
+                static const int DEFAULT_FRAME_SIZE = 1024;
                 static const int SAMPLE_RATE = 44100;
         public:
                 AudioResampler();
                 ~AudioResampler();
                 int Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OUT std::vector<uint8_t>& buffer);
                 int Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, std::function<void (const std::shared_ptr<MediaFrame>& out)> callback);
+
+                int frameSize = DEFAULT_FRAME_SIZE;
         private:
                 int Init(IN const std::shared_ptr<MediaFrame>& pFrame);
                 int Reset();

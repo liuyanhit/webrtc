@@ -225,10 +225,10 @@ int AvDecoder::Decode(IN const std::unique_ptr<MediaPacket>& _pPacket, IN FrameH
 
 Input::Input(IN const std::string& _name)
         :OptionMap(),
-         name_(_name),
-         videoQ_(Input::VIDEO_Q_LEN),
-         audioQ_(Input::AUDIO_Q_LEN),
-         resampler_()
+        resampler_(),
+        name_(_name),
+        videoQ_(Input::VIDEO_Q_LEN),
+        audioQ_(Input::AUDIO_Q_LEN)
 {
         bReceiverExit_.store(false);
 }
@@ -288,7 +288,6 @@ void Input::Start(IN const std::string& _url)
                                                 }
                                                 this->lastpts_ = _pFrame->AvFrame()->pts;
                                         }
-                                        SendFrame(_pFrame);
 
                                         // format video/audio data
                                         if (_pFrame->Stream() == STREAM_VIDEO) {
@@ -332,6 +331,11 @@ void Input::Stop()
 
 void Input::SetVideo(const std::shared_ptr<MediaFrame>& _pFrame)
 {
+        if (!doRescale_) {
+                SendFrame(_pFrame);
+                return;
+        }
+
         // convert color space to YUV420p and rescale the image
 
         int nW, nH;
@@ -383,13 +387,20 @@ void Input::SetVideo(const std::shared_ptr<MediaFrame>& _pFrame)
         }
 
         videoQ_.ForcePush(pFrame);
+        SendFrame(pFrame);
 }
 
 void Input::SetAudio(const std::shared_ptr<MediaFrame>& _pFrame)
 {
-        resampler_.Resample(_pFrame, [&](const std::shared_ptr<MediaFrame>& pNewFrame) {
-                audioQ_.ForcePush(pNewFrame);
-        });
+        if (doResample_) {
+                resampler_.Resample(_pFrame, [&](const std::shared_ptr<MediaFrame>& pNewFrame) {
+                        SendFrame(pNewFrame);
+                        audioQ_.ForcePush(pNewFrame);
+                });
+        } else {
+                SendFrame(_pFrame);
+                audioQ_.ForcePush(_pFrame);
+        }
 }
 
 bool Input::GetVideo(OUT std::shared_ptr<MediaFrame>& _pFrame, OUT size_t& _nQlen)

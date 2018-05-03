@@ -8,12 +8,9 @@ using namespace muxer;
 
 const int AudioResampler::CHANNELS;
 const AVSampleFormat AudioResampler::SAMPLE_FMT;
-const int AudioResampler::FRAME_SIZE;
 
 AudioResampler::AudioResampler()
 {
-        sampleBuffer_.reserve(AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * 2 * 4);
-        sampleBuffer_.resize(0);
 }
 
 AudioResampler::~AudioResampler()
@@ -29,6 +26,9 @@ int AudioResampler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
                 Warn("internal: resampler: already init");
                 return -1;
         }
+
+        sampleBuffer_.reserve(frameSize * AudioResampler::CHANNELS * 2 * 4);
+        sampleBuffer_.resize(0);
 
         // for fdkaac encoder, input samples should be PCM signed16le, otherwise do resampling
         if (_pFrame->AvFrame()->format != AudioResampler::SAMPLE_FMT ||
@@ -80,7 +80,7 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pFrame, std:
         std::copy(buffer.begin(), buffer.end(), &sampleBuffer_[nBufSize]);
 
         // if the buffer size meets the min requirement of encoding one frame, build a frame and push upon audio queue
-        size_t nSizeEachFrame = AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * av_get_bytes_per_sample(AudioResampler::SAMPLE_FMT);
+        size_t nSizeEachFrame = frameSize * AudioResampler::CHANNELS * av_get_bytes_per_sample(AudioResampler::SAMPLE_FMT);
 
         //Info("resample %lu %lu %lu %p", buffer.size(), sampleBuffer_.size(), nSizeEachFrame, &sampleBuffer_);
 
@@ -89,7 +89,7 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pFrame, std:
                 pNewFrame->Stream(_pFrame->Stream());
                 pNewFrame->Codec(_pFrame->Codec());
                 av_frame_copy_props(pNewFrame->AvFrame(), _pFrame->AvFrame());
-                pNewFrame->AvFrame()->nb_samples = AudioResampler::FRAME_SIZE;
+                pNewFrame->AvFrame()->nb_samples = frameSize;
                 pNewFrame->AvFrame()->format = AudioResampler::SAMPLE_FMT;
                 pNewFrame->AvFrame()->channels = AudioResampler::CHANNELS;
                 pNewFrame->AvFrame()->channel_layout = AudioResampler::CHANNEL_LAYOUT;

@@ -1254,7 +1254,7 @@ int RtmpSender::SendH264Packet(IN const char* _pData, IN size_t _nSize, IN size_
                                IN bool _bIsKeyFrame, size_t _nCompositionTime)
 {
         if (_pData == nullptr || _nSize < 11) {
-                Warn("rtmp: sender: invalid h264 packet: size=%lu", _nSize);
+                //Warn("rtmp: sender: invalid h264 packet: size=%lu", _nSize);
                 return 1001; // just drop, do not exit
         }
 

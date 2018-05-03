@@ -576,6 +576,9 @@ void CmdHost::handleNewUrlStream(const Json::Value& req, rtc::scoped_refptr<CmdD
 
     muxer::Input* input = new muxer::Input("");
     input->nativeRate_ = true;
+    input->doRescale_ = false;
+    input->doResample_ = true;
+    input->resampler_.frameSize = int(muxer::AudioResampler::SAMPLE_RATE * 0.01);
     input->Start(url);
 
     auto stream_id = newReqId();

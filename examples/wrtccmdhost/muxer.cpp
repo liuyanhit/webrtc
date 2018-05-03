@@ -293,56 +293,31 @@ int AvMuxer::Start()
                 std::vector<std::shared_ptr<MediaFrame>> audioFrames;
                 std::shared_ptr<MediaFrame> pOutFrame;
                 // vars for simple congestion control
-                size_t nQlen = 0, nSum = 0, nInputNum = 0;
 
                 while (true) {
-                        nInputNum = inputs_.Foreach([&](std::shared_ptr<Input>& _pInput) {
-                                        std::shared_ptr<MediaFrame> pFrame;
-                                        if (_pInput->GetOption(options::muted) == false &&
-                                            _pInput->GetAudio(pFrame, nQlen) == true) {
-                                                audioFrames.push_back(pFrame);
-                                        }
-                                        nSum += nQlen;
-                                });
-                        if (audioFrames.size() == 0) {
-                                usleep(5*1000);
+                        size_t n = 0;
+                        inputs_.Foreach([&](std::shared_ptr<Input>& _pInput) {
+                                if (_pInput->GetOption(options::muted)) {
+                                        return;
+                                }
+                                std::shared_ptr<MediaFrame> pFrame;
+                                size_t nQlen = 0;
+                                if (_pInput->GetAudio(pFrame, nQlen)) {
+                                        audioFrames.push_back(pFrame);
+                                }
+                                n++;
+                        });
+                        if (audioFrames.size() == 0 || audioFrames.size() < n) {
+                                usleep(int(double(AudioResampler::DEFAULT_FRAME_SIZE)/AudioResampler::SAMPLE_RATE*1000));
                                 continue;
                         }
+                        //DebugPCM("/tmp/rtc.mix0.s16", audioFrames[0]->AvFrame()->data[0], audioFrames[0]->AvFrame()->linesize[0]);
+
                         if (audioMixer_.Mix(audioFrames, pOutFrame) == 0) {
                                 DebugPCM("/tmp/rtc.mix.s16", pOutFrame->AvFrame()->data[0], pOutFrame->AvFrame()->linesize[0]);
                                 FeedOutputs(pOutFrame);
                         }
                         audioFrames.clear();
-                        continue;
-
-                        // inputs congestion control: easily sleep variable milliseconds to make sure we
-                        // get audio frames from each input steadily
-                        auto nBaseDur = AudioResampler::FRAME_SIZE * 1000 / AudioResampler::SAMPLE_RATE;
-                        if (nInputNum == 0) {
-                                usleep(nBaseDur * 1000);
-                        } else {
-                                auto nAvg = nSum / nInputNum;
-                                if (nAvg < 10) {
-                                        usleep((nBaseDur + 2) * 1000);
-                                } else if (nAvg < 20) {
-                                        usleep((nBaseDur + 1) * 1000);
-                                } else if (nAvg > 40 && nAvg < 50) {
-                                        usleep((nBaseDur - 1) * 1000);
-                                } else if (nAvg > 50 && nAvg < 60) {
-                                        usleep((nBaseDur - 2) * 1000);
-                                } else if (nAvg > 60 && nAvg < 70) {
-                                        usleep((nBaseDur - 3) * 1000);
-                                } else if (nAvg > 70 && nAvg < 80) {
-                                        usleep((nBaseDur - 4) * 1000);
-                                } else if (nAvg > 80 && nAvg < 90) {
-                                        usleep((nBaseDur - 5) * 1000);
-                                } else if (nAvg > 90) {
-                                        usleep((nBaseDur - 8) * 1000);
-                                } else {
-                                        usleep(nBaseDur * 1000);
-                                }
-                        }
-                        nSum = 0;
                 }
         };
 
@@ -547,7 +522,7 @@ int AudioMixer::Mix(IN const std::vector<std::shared_ptr<MediaFrame>>& _frames, 
         auto pMuted = std::make_shared<MediaFrame>();
         pMuted->Stream(STREAM_AUDIO);
         pMuted->Codec(CODEC_AAC);
-        pMuted->AvFrame()->nb_samples = AudioResampler::FRAME_SIZE;
+        pMuted->AvFrame()->nb_samples = AudioResampler::DEFAULT_FRAME_SIZE;
         pMuted->AvFrame()->format = AudioResampler::SAMPLE_FMT;
         pMuted->AvFrame()->channels = AudioResampler::CHANNELS;
         pMuted->AvFrame()->channel_layout = AudioResampler::CHANNEL_LAYOUT;
