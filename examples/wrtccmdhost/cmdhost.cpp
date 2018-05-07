@@ -471,6 +471,12 @@ void CmdHost::handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<Cmd
 
     auto sink = new muxer::RtmpSink(url);
     auto sinkid = newReqId();
+
+    auto kbps = jsonAsInt(req["kbps"]);
+    if (kbps != 0) {
+        sink->videoKbps = kbps;
+    }
+
     stream->AddSink(sinkid, sink);
 
     Json::Value res;

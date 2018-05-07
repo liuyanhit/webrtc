@@ -213,6 +213,8 @@ namespace muxer
                 void OnStart();
                 void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame);
                 void OnStop();
+                
+                int videoKbps = 1000;
 
         private:
                 std::string url_;

@@ -1460,8 +1460,7 @@ void RtmpSink::OnStart() {
                         auto aEncoder = std::make_unique<AvEncoder>();
                         auto avSender = std::make_unique<RtmpSender>();
 
-                        vEncoder->Bitrate(1500);
-                        aEncoder->Bitrate(100);
+                        vEncoder->Bitrate(videoKbps);
 
                         auto encoderHook = [&](IN const std::shared_ptr<MediaPacket>& _pPacket) -> int {
                                 if (bSenderExit_.load() == true) {
