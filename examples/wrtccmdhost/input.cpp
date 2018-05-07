@@ -419,6 +419,14 @@ bool Input::GetVideo(OUT std::shared_ptr<MediaFrame>& _pFrame, OUT size_t& _nQle
         return true;
 }
 
+bool Input::GetAudioLatest(OUT std::shared_ptr<MediaFrame>& _pFrame, size_t limit)
+{
+        while (audioQ_.Size() > limit) {
+                audioQ_.Pop();
+        }
+        return audioQ_.TryPop(_pFrame);
+}
+
 bool Input::GetAudio(OUT std::shared_ptr<MediaFrame>& _pFrame, OUT size_t& _nQlen)
 {
         //size_t nSizeEachFrame = AudioResampler::FRAME_SIZE * AudioResampler::CHANNELS * av_get_bytes_per_sample(AudioResampler::SAMPLE_FMT);

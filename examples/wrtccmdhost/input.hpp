@@ -53,6 +53,7 @@ namespace muxer
                 // pop one video/audio
                 bool GetVideo(OUT std::shared_ptr<MediaFrame>& pFrame, OUT size_t& nQlen);
                 bool GetAudio(OUT std::shared_ptr<MediaFrame>& pFrame, OUT size_t& nQlen);
+                bool GetAudioLatest(OUT std::shared_ptr<MediaFrame>& pFrame, size_t limit);
 
         public:
                 // push one video/audio

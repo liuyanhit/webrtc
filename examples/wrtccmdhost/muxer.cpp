@@ -301,8 +301,7 @@ int AvMuxer::Start()
                                         return;
                                 }
                                 std::shared_ptr<MediaFrame> pFrame;
-                                size_t nQlen = 0;
-                                if (_pInput->GetAudio(pFrame, nQlen)) {
+                                if (_pInput->GetAudioLatest(pFrame, 3)) {
                                         audioFrames.push_back(pFrame);
                                 }
                                 n++;
