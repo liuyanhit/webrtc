@@ -349,6 +349,9 @@ void CmdHost::handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdHo
         muxers_map_[id] = m;
     }
 
+    bool audioOnly = jsonAsBool(req["audioOnly"]);
+    m->audioOnly_.store(audioOnly);
+
     auto stream = new LibmuxerOutputStream();
     auto stream_id = newReqId();
     {

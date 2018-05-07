@@ -57,6 +57,9 @@ namespace muxer
                 std::shared_ptr<Input> FindInput(IN const std::string& name);
                 std::shared_ptr<Output> FindOutput(IN const std::string& name);
                 void FeedOutputs(IN std::shared_ptr<MediaFrame>& pFrame);
+
+                std::atomic<bool> audioOnly_;
+
         private:
                 SharedQueue<std::shared_ptr<Input>> inputs_;
                 SharedQueue<std::shared_ptr<Output>> outputs_;

@@ -81,6 +81,7 @@ void OptionMap::GetOptions(IN const OptionMap& _opts)
 AvMuxer::AvMuxer(IN int _nWidth, IN int _nHeight)
         :videoMuxer_(_nWidth, _nHeight)
 {
+        audioOnly_.store(false);
         av_register_all();
         avformat_network_init();
 }
@@ -266,6 +267,9 @@ int AvMuxer::Start()
                 size_t nQlen;
 
                 while (true) {
+                        if (audioOnly_.load()) {
+                                goto sleep;
+                        }
                         inputs_.Foreach([&](std::shared_ptr<Input>& _pInput){
                                         std::shared_ptr<MediaFrame> pFrame;
                                         if (_pInput->GetOption(options::hidden) == false &&
@@ -285,6 +289,7 @@ int AvMuxer::Start()
                                 FeedOutputs(pOutFrame);
                         }
                         videoFrames.clear();
+                sleep:
                         usleep(40 * 1000);
                 }
         };
