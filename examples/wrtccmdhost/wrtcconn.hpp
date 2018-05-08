@@ -55,6 +55,8 @@ public:
     );
     bool AddIceCandidate(webrtc::IceCandidateInterface* candidate);
 
+    void GetStats(webrtc::RTCStatsCollectorCallback* cb);
+
     bool AddStream(SinkAddRemover* stream);
 
 private:

@@ -282,6 +282,10 @@ bool WRTCConn::AddIceCandidate(webrtc::IceCandidateInterface* candidate) {
     return pc_->AddIceCandidate(candidate);
 }
 
+void WRTCConn::GetStats(webrtc::RTCStatsCollectorCallback* cb) {
+    pc_->GetStats(cb);
+}
+
 class AudioBroadcaster: public webrtc::AudioSourceInterface {
 public:
     void AddSink(webrtc::AudioTrackSinkInterface* sink) {

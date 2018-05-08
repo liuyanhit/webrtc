@@ -77,7 +77,7 @@ int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
                 pAvEncoderContext_ = nullptr;
                 return -1;
         } else {
-                Info("open encoder: stream=%d, codec=%d", _pFrame->Stream(), _pFrame->Codec());
+                Verbose("open encoder: stream=%d, codec=%d", _pFrame->Stream(), _pFrame->Codec());
                 bIsEncoderAvailable_ = true;
         }
 
@@ -89,7 +89,7 @@ int AvEncoder::Preset(IN const std::shared_ptr<MediaFrame>& _pFrame)
         switch(_pFrame->Codec()) {
         case CODEC_AAC: return PresetAac(_pFrame);
         case CODEC_H264: return PresetH264(_pFrame);
-        default: Info("no preset");
+        default: Verbose("no preset");
         }
         return -1;
 }
@@ -108,7 +108,7 @@ int AvEncoder::PresetAac(IN const std::shared_ptr<MediaFrame>& _pFrame)
                 pAvEncoderContext_->bit_rate = 128000;
         }
 
-        Info("default aac preset: sample_fmt=s16, sample_rate=%d, channels=%d, bit_rate=%d",
+        Verbose("default aac preset: sample_fmt=s16, sample_rate=%d, channels=%d, bit_rate=%d",
              pAvEncoderContext_->sample_rate, pAvEncoderContext_->channels, (int)pAvEncoderContext_->bit_rate);
 
         // reserve buffer
@@ -121,7 +121,7 @@ int AvEncoder::PresetAac(IN const std::shared_ptr<MediaFrame>& _pFrame)
 
 int AvEncoder::PresetH264(IN const std::shared_ptr<MediaFrame>& _pFrame)
 {
-        Info("default h.264 preset: width=%d, height=%d", _pFrame->AvFrame()->width, _pFrame->AvFrame()->height);
+        Verbose("default h.264 preset: width=%d, height=%d", _pFrame->AvFrame()->width, _pFrame->AvFrame()->height);
 
         pAvEncoderContext_->pix_fmt = AV_PIX_FMT_YUV420P;
 
@@ -160,7 +160,7 @@ int AvEncoder::Encode(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHandler
         switch(_pFrame->Codec()) {
         case CODEC_AAC: return EncodeAac(_pFrame, _callback);
         case CODEC_H264: return EncodeH264(_pFrame, _callback);
-        default: Info("no preset");
+        default: Verbose("no preset");
         }
         return -1;        
 }
@@ -301,7 +301,7 @@ int AvEncoder::EncodeH264(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHan
                 int nStatus = avcodec_send_frame(pAvEncoderContext_, _pFrame->AvFrame());
                 if (nStatus != 0) {
                         if (nStatus == AVERROR(EAGAIN)) {
-                                Warn("internal: assert failed, we should not get EAGAIN");
+                                //Warn("internal: assert failed, we should not get EAGAIN");
                                 bNeedSendAgain = true;
                         } else {
                                 Error("h264 encoder: could not send frame, status=%d", nStatus);
@@ -489,7 +489,7 @@ bool AdtsHeader::Parse(IN const char* _pBuffer)
                 nNoRawDataBlocksInFrame = ((unsigned int)_pBuffer[6] & 0x03);
                 return true;
         } else {
-                Warn("wrong AAC ADTS header");
+                //Warn("wrong AAC ADTS header");
                 return false;
         }
 }
@@ -557,7 +557,7 @@ int H264Nalu::Size() const
 int H264Nalu::Type() const
 {
         if (payload_.size() == 0) {
-                Warn("h264 NALU data size=0");
+                //Warn("h264 NALU data size=0");
                 return -1;
         }
         return payload_[0] & 0xf;
@@ -790,6 +790,7 @@ inline int ASC_SF_VALUE(int sf)
 
 RtmpSender::RtmpSender()
 {
+        bytesSent_.store(0);
 }
 
 RtmpSender::~RtmpSender()
@@ -799,58 +800,6 @@ RtmpSender::~RtmpSender()
                 RTMP_Free(pRtmp_);
                 pRtmp_ = nullptr;
         }
-
-        if (pFlvFile_ != nullptr) {
-                fclose(pFlvFile_);
-                pFlvFile_ = nullptr;
-        }
-}
-
-static int FlvFileWriteHeader(FILE *fp) {
-        static uint8_t hdr[] = {
-                'F','L','V',0x01, 
-                0,
-                0,0,0,9,
-                0,0,0,0,
-        };
-        if (fpwrite(fp, hdr, sizeof(hdr)) < 0) {
-                return -1;
-        }
-        return 0;
-}
-
-static int FlvFileWritePacket(FILE *fp, RTMPPacket *p) {
-        uint8_t hdr[] = {
-                p->m_packetType,
-                (uint8_t)((p->m_nBodySize>>16)&0xff),
-                (uint8_t)((p->m_nBodySize>>8)&0xff),
-                (uint8_t)((p->m_nBodySize>>0)&0xff),
-                (uint8_t)((p->m_nTimeStamp>>16)&0xff),
-                (uint8_t)((p->m_nTimeStamp>>8)&0xff),
-                (uint8_t)((p->m_nTimeStamp>>0)&0xff),
-                (uint8_t)((p->m_nTimeStamp>>24)&0xff),
-                0,0,0,
-        };
-        uint32_t tagsize = p->m_nBodySize+11;
-        uint8_t tail[] = {
-                (uint8_t)((tagsize>>24)&0xff),
-                (uint8_t)((tagsize>>16)&0xff),
-                (uint8_t)((tagsize>>8)&0xff),
-                (uint8_t)((tagsize>>0)&0xff),
-        };
-        if (fpwrite(fp, hdr, sizeof(hdr)) < 0) {
-                return -1;
-        }
-        if (fpwrite(fp, p->m_body, p->m_nBodySize) < 0) {
-                return -1;
-        }
-        if (fpwrite(fp, tail, sizeof(tail)) < 0) {
-                return -1;
-        }
-        if (fflush(fp) != 0) {
-                return -1;
-        }
-        return 0;
 }
 
 int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPacket>& _pPacket)
@@ -861,13 +810,11 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                         RTMP_Init(pRtmp_);
                 } else {
                         Info("flv: create %s", url.c_str());
-                        pFlvFile_ = fopen(url.c_str(), "wb+");
+                        pFlvFile_ = FlvFile::Create(url);
                         if (pFlvFile_ == nullptr) {
-                                Error("flv: create %s failed", url.c_str());
                                 return -1;
                         }
-                        if (FlvFileWriteHeader(pFlvFile_) < 0) {
-                                Error("flv: write header failed");
+                        if (pFlvFile_->WriteHeader() < 0) {
                                 return -1;
                         }
                         keepSpsPpsInNalus_ = true;
@@ -930,6 +877,17 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                 }
                 return 0; // do nothing
         }
+
+        int64_t bytesSent = 0;
+        if (pRtmp_ != nullptr) {
+                bytesSent = pRtmp_->bytesSent;
+                pRtmp_->bytesSent = 0;
+        } else if (pFlvFile_ != nullptr) {
+                bytesSent = pFlvFile_->bytesWritten;
+                pFlvFile_->bytesWritten = 0;
+        }
+
+        bytesSent_.fetch_add(bytesSent);
 
         return nStatus;
 }
@@ -1414,7 +1372,7 @@ int RtmpSender::SendRawPacket(IN unsigned int _nPacketType, IN int _nHeaderType,
                         goto out_free;
                 }
         } else if (pFlvFile_ != nullptr) {
-                if (FlvFileWritePacket(pFlvFile_, &packet) < 0) {
+                if (pFlvFile_->WritePacket(&packet) < 0) {
                         goto out_free;
                 }
         }
@@ -1451,6 +1409,7 @@ RtmpSink::RtmpSink(const std::string& url):
 {
         url_ = url;
         bSenderExit_.store(false);
+        rtmpSender_ = std::make_unique<RtmpSender>();
 }
 
 void RtmpSink::OnStart() {
@@ -1458,7 +1417,6 @@ void RtmpSink::OnStart() {
                 while (bSenderExit_.load() == false) {
                         auto vEncoder = std::make_unique<AvEncoder>();
                         auto aEncoder = std::make_unique<AvEncoder>();
-                        auto avSender = std::make_unique<RtmpSender>();
 
                         vEncoder->Bitrate(videoKbps);
 
@@ -1466,7 +1424,7 @@ void RtmpSink::OnStart() {
                                 if (bSenderExit_.load() == true) {
                                         return -1;
                                 }
-                                return avSender->Send(url_, _pPacket);
+                                return rtmpSender_->Send(url_, _pPacket);
                         };
 
                         while (bSenderExit_.load() == false) {
@@ -1490,7 +1448,7 @@ void RtmpSink::OnStart() {
                 }
         };
 
-        sender_ = std::thread(snd);
+        senderThread_ = std::thread(snd);
 }
 
 void RtmpSink::OnFrame(const std::shared_ptr<muxer::MediaFrame>& pFrame) {
@@ -1505,8 +1463,8 @@ void RtmpSink::OnFrame(const std::shared_ptr<muxer::MediaFrame>& pFrame) {
 
 void RtmpSink::OnStop() {
         bSenderExit_.store(true);
-        if (sender_.joinable()) {
-                sender_.join();
+        if (senderThread_.joinable()) {
+                senderThread_.join();
         }
 }
 

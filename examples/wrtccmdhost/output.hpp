@@ -110,6 +110,81 @@ namespace muxer
                 std::vector<char> payload_;
         };
 
+        class FlvFile {
+        public:
+                FlvFile(FILE *fp) : fp_(fp) {
+                }
+
+                ~FlvFile() {
+                        fclose(fp_);
+                }
+
+                int WriteHeader() {
+                        static uint8_t hdr[] = {
+                                'F','L','V',0x01, 
+                                0,
+                                0,0,0,9,
+                                0,0,0,0,
+                        };
+                        if (write(hdr, sizeof(hdr)) < 0) {
+                                return -1;
+                        }
+                        return 0;
+                }
+
+                int WritePacket(RTMPPacket *p) {
+                        uint8_t hdr[] = {
+                                p->m_packetType,
+                                (uint8_t)((p->m_nBodySize>>16)&0xff),
+                                (uint8_t)((p->m_nBodySize>>8)&0xff),
+                                (uint8_t)((p->m_nBodySize>>0)&0xff),
+                                (uint8_t)((p->m_nTimeStamp>>16)&0xff),
+                                (uint8_t)((p->m_nTimeStamp>>8)&0xff),
+                                (uint8_t)((p->m_nTimeStamp>>0)&0xff),
+                                (uint8_t)((p->m_nTimeStamp>>24)&0xff),
+                                0,0,0,
+                        };
+                        uint32_t tagsize = p->m_nBodySize+11;
+                        uint8_t tail[] = {
+                                (uint8_t)((tagsize>>24)&0xff),
+                                (uint8_t)((tagsize>>16)&0xff),
+                                (uint8_t)((tagsize>>8)&0xff),
+                                (uint8_t)((tagsize>>0)&0xff),
+                        };
+                        if (write(hdr, sizeof(hdr)) < 0) {
+                                return -1;
+                        }
+                        if (write(p->m_body, p->m_nBodySize) < 0) {
+                                return -1;
+                        }
+                        if (write(tail, sizeof(tail)) < 0) {
+                                return -1;
+                        }
+                        if (fflush(fp_) != 0) {
+                                return -1;
+                        }
+                        return 0;
+                }
+
+                static std::shared_ptr<FlvFile> Create(const std::string& path) {
+                        FILE *fp = fopen(path.c_str(), "wb+");
+                        if (fp == NULL) {
+                                Error("flv: create %s failed", path.c_str());
+                                return nullptr;
+                        }
+                        return std::make_shared<FlvFile>(fp);
+                }
+
+                int64_t bytesWritten = 0;
+
+        private:
+                int write(void *buf, size_t len) {
+                        bytesWritten += len;
+                        return fwrite(buf, 1, len, fp_) != len ? -1 : 0;
+                }
+                FILE *fp_;
+        };
+
         //
         // RtmpSender
         //
@@ -120,7 +195,8 @@ namespace muxer
                 RtmpSender();
                 ~RtmpSender();
                 virtual int Send(IN const std::string& url, IN const std::shared_ptr<MediaPacket>& pPacket);
-
+                std::atomic<int64_t> bytesSent_;
+                
         private:
                 // send audio
                 int SendMp3Packet(IN const MediaPacket& packet);
@@ -196,7 +272,7 @@ namespace muxer
 
                 // RTMP object from RTMP dump
                 RTMP* pRtmp_ = nullptr;
-                FILE *pFlvFile_ = nullptr;
+                std::shared_ptr<FlvFile> pFlvFile_ = nullptr;
                 bool useAnnexbConcatNalus_ = false;
                 bool keepSpsPpsInNalus_ = false;
                 bool dontSendMetadata_ = false;
@@ -213,12 +289,16 @@ namespace muxer
                 void OnStart();
                 void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame);
                 void OnStop();
-                
+                void OnStatBytes(int64_t& bytes) {
+                        bytes = rtmpSender_->bytesSent_.exchange(0);
+                }
+
                 int videoKbps = 1000;
 
         private:
+                std::shared_ptr<RtmpSender> rtmpSender_; 
                 std::string url_;
-                std::thread sender_;
+                std::thread senderThread_;
                 std::atomic<bool> bSenderExit_;
                 SharedQueue<std::shared_ptr<MediaFrame>> muxedQ_;
                 AudioResampler resampler_;

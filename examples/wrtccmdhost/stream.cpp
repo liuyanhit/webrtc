@@ -23,6 +23,15 @@ bool Stream::RemoveSink(const std::string& id) {
     return true;
 }
 
+SinkObserver *Stream::FindSink(const std::string& id) {
+    std::lock_guard<std::mutex> lock(sinks_map_lock_);
+    auto it = sinks_map_.find(id);
+    if (it == sinks_map_.end()) {
+        return NULL;
+    }
+    return it->second;
+}
+
 void Stream::SendFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
     std::lock_guard<std::mutex> lock(sinks_map_lock_);
 

@@ -10,7 +10,7 @@ public:
     virtual void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) = 0;
     virtual void OnStart() {};
     virtual void OnStop() {};
-    virtual void OnStat(Json::Value& stat) {};
+    virtual void OnStatBytes(int64_t& bytes) {};
     virtual ~SinkObserver() {}
 
 private:
@@ -35,6 +35,7 @@ public:
     Stream() : sinks_map_(), sinks_map_lock_() {}
     bool AddSink(const std::string& id, SinkObserver *sink);
     bool RemoveSink(const std::string& id);
+    SinkObserver *FindSink(const std::string& id);
     void SendFrame(const std::shared_ptr<muxer::MediaFrame>& frame);
 
 private:

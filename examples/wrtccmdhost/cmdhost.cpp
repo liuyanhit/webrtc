@@ -35,6 +35,8 @@ const std::string mtStreamAddSink = "stream-add-sink";
 const std::string mtNewCanvasStream = "new-canvas-stream";
 const std::string mtNewUrlStream = "new-url-stream";
 const std::string mtConnAddStream = "conn-add-stream";
+const std::string mtConnStats = "conn-stats";
+const std::string mtSinkStats = "sink-stats";
 
 static void parseOfferAnswerOpt(const Json::Value& v, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions& opt) {
     auto audio = v["audio"];
@@ -451,15 +453,8 @@ void CmdHost::handleLibmuxerSetInputsOpt(const Json::Value& req, rtc::scoped_ref
 }
 
 void CmdHost::handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
-    auto id = jsonAsString(req[kId]);
-
-    Stream *stream = NULL;
-    {
-        std::lock_guard<std::mutex> lock(streams_map_lock_);
-        stream = streams_map_[id];
-    }
+    auto stream = checkStream(jsonAsString(req[kId]), observer);
     if (stream == NULL) {
-        observer->OnFailure(errInvalidParams, "stream not found");
         return;
     }
 
@@ -649,6 +644,50 @@ void CmdHost::handleConnAddStream(const Json::Value& req, rtc::scoped_refptr<Cmd
     observer->OnSuccess();
 }
 
+class ConnGetStatsObserver: public webrtc::RTCStatsCollectorCallback {
+public:
+    ConnGetStatsObserver(rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) : observer_(observer) {}
+
+    void OnStatsDelivered(const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
+        Json::Value res;
+        res["stats"] = report->ToJson();
+        observer_->OnSuccess(res);
+    }
+
+    int AddRef() const { return 0; }
+    int Release() const { return 0; }
+
+    rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer_;
+};
+
+void CmdHost::handleConnStats(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    auto conn = checkConn(req, observer);
+    if (conn == NULL) {
+        return;
+    }
+    conn->GetStats(new ConnGetStatsObserver(observer));
+}
+
+void CmdHost::handleSinkStats(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
+    auto stream = checkStream(jsonAsString(req[kId]), observer);
+    if (stream == NULL) {
+        return;
+    }
+
+    auto sink = stream->FindSink(jsonAsString(req["sink_id"]));
+    if (sink == NULL) {
+        observer->OnFailure(errInvalidParams, "sink not found");
+        return;
+    }
+
+    int64_t bytes = 0;
+    sink->OnStatBytes(bytes);
+
+    Json::Value res;
+    res["bytes"] = bytes;
+    observer->OnSuccess(res);
+}
+
 class CmdDoneWriteResObserver: public CmdHost::CmdDoneObserver {
 public:
     CmdDoneWriteResObserver(rtc::scoped_refptr<MsgPump::Request> req) : req_(req) {}
@@ -699,6 +738,10 @@ void CmdHost::handleReq(rtc::scoped_refptr<MsgPump::Request> req) {
         handleConnAddStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
     } else if (type == mtNewUrlStream) {
         handleNewUrlStream(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));       
+    } else if (type == mtConnStats) {
+        handleConnStats(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));
+    } else if (type == mtSinkStats) {
+        handleSinkStats(req->body, new rtc::RefCountedObject<CmdDoneWriteResObserver>(req));        
     }
 }
 
