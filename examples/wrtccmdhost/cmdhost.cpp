@@ -684,7 +684,7 @@ void CmdHost::handleSinkStats(const Json::Value& req, rtc::scoped_refptr<CmdDone
     sink->OnStatBytes(bytes);
 
     Json::Value res;
-    res["bytes"] = bytes;
+    res["bytes"] = int(bytes);
     observer->OnSuccess(res);
 }
 
