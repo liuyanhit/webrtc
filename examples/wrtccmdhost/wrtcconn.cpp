@@ -35,6 +35,10 @@ public:
 
         DebugR("OnFrameVideo ts=%lf", id_.c_str(), elapsed_d.count());
 
+        if (rtcframe.width() == 0 || rtcframe.height() == 0) {
+            return;
+        }
+
         auto rtcfb = rtcframe.video_frame_buffer();
         auto i420 = rtcfb->ToI420();
         if (rtcframe.rotation() != webrtc::kVideoRotation_0) {
@@ -84,7 +88,7 @@ public:
         auto now = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::ratio<1,1>> diff_d(now - audio_ts_);
         if (diff_d.count() > 0.2) {
-            //audio_ts_ = now;
+            audio_ts_ = now;
         }
         std::chrono::duration<double, std::ratio<1,1>> elapsed_d(audio_ts_ - start_ts_);
         std::chrono::nanoseconds inc((long long)(1e9 / (double)sample_rate * (double)number_of_frames));

@@ -344,6 +344,12 @@ public:
 void CmdHost::handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdHost::CmdDoneObserver> observer) {
     int w = jsonAsInt(req["w"]);
     int h = jsonAsInt(req["h"]);
+
+    if (w == 0 || h == 0) {
+        observer->OnFailure(errInvalidParams, "invalid w or h");
+        return;
+    }
+
     auto m = new muxer::AvMuxer(w, h);
     auto id = newReqId();
     {
@@ -372,13 +378,15 @@ void CmdHost::handleNewLibmuxer(const Json::Value& req, rtc::scoped_refptr<CmdHo
 
 static void libmuxerSetInputOpt(const std::shared_ptr<muxer::Input>& lin, const Json::Value& opt) {
     if (opt.isObject()) {
-        auto w = opt["w"];
-        if (!w.empty()) {
-            lin->SetOption("w", jsonAsInt(w));
+        auto w = jsonAsInt(opt["w"]);
+        if (w <= 0) {
+            Fatal("invalid w");
+            lin->SetOption("w", w);
         }
-        auto h = opt["h"];
-        if (!h.empty()) {
-            lin->SetOption("h", jsonAsInt(h));
+        auto h = jsonAsInt(opt["h"]);
+        if (h <= 0) {
+            Fatal("invalid h");
+            lin->SetOption("h", h);
         }
         auto x = opt["x"];
         if (!x.empty()) {
