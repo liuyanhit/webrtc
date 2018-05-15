@@ -1354,7 +1354,7 @@ int RtmpSender::SendRawPacket(IN unsigned int _nPacketType, IN int _nHeaderType,
                 Warn("internal: rtmp packet type=%d not recognized", _nPacketType);
                 return -1;
         }
-        packet.m_nTimeStamp = nCalculated;
+        packet.m_nTimeStamp = _nTimestamp;
 
         if (nCalculated < 0) {
                 Warn("drop packet with abnormal pts=%lu", _nTimestamp);
@@ -1404,6 +1404,8 @@ ssize_t RtmpSender::AccTimestamp(IN const size_t& _nNow, OUT size_t& _nBase, OUT
 
 RtmpSink::RtmpSink(const std::string& url): 
         muxedQ_(100),
+        audiobufQ_(100),
+        videobufQ_(100),
         resampler_()
 
 {
@@ -1413,7 +1415,7 @@ RtmpSink::RtmpSink(const std::string& url):
 }
 
 void RtmpSink::OnStart() {
-        auto snd = [this] {
+        auto snd = [&] {
                 while (bSenderExit_.load() == false) {
                         auto vEncoder = std::make_unique<AvEncoder>();
                         auto aEncoder = std::make_unique<AvEncoder>();
@@ -1424,7 +1426,49 @@ void RtmpSink::OnStart() {
                                 if (bSenderExit_.load() == true) {
                                         return -1;
                                 }
-                                return rtmpSender_->Send(url_, _pPacket);
+
+                                if (_pPacket->Stream() == STREAM_VIDEO) {
+                                        videobufQ_.Push(_pPacket);
+                                } else {
+                                        audiobufQ_.Push(_pPacket);
+                                }
+
+                                //Info("packet %d %lld v=%zu a=%zu", _pPacket->Stream(), _pPacket->Dts(),
+                                //videobufQ_.Size(), audiobufQ_.Size());
+
+                                std::shared_ptr<MediaPacket> send;
+
+                                if (videobufQ_.Size() + audiobufQ_.Size() < 60) {
+                                        return 0;
+                                }
+                                
+                                std::shared_ptr<MediaPacket> a, v;
+                                auto hasV = videobufQ_.Peek(v);
+                                auto hasA = audiobufQ_.Peek(a);
+                                bool sendV = false;
+                                if (hasV && hasA) {
+                                        auto vdts = v->AvPacket()->dts;
+                                        if (vdts == AV_NOPTS_VALUE) {
+                                                vdts = 0;
+                                        }
+                                        auto adts = a->AvPacket()->dts;
+                                        if (adts == AV_NOPTS_VALUE) {
+                                                adts = 0;
+                                        }
+                                        if (vdts < adts) {
+                                                sendV = true;
+                                        }
+                                } else if (hasV) {
+                                        sendV = true;
+                                }
+
+                                if (sendV) {
+                                        send = videobufQ_.Pop();
+                                } else {
+                                        send = audiobufQ_.Pop();
+                                }
+
+                                return rtmpSender_->Send(url_, send);
                         };
 
                         while (bSenderExit_.load() == false) {

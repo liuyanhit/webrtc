@@ -301,6 +301,8 @@ namespace muxer
                 std::thread senderThread_;
                 std::atomic<bool> bSenderExit_;
                 SharedQueue<std::shared_ptr<MediaFrame>> muxedQ_;
+                SharedQueue<std::shared_ptr<MediaPacket>> audiobufQ_;
+                SharedQueue<std::shared_ptr<MediaPacket>> videobufQ_;
                 AudioResampler resampler_;
         };
 

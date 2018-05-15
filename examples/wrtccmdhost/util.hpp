@@ -80,6 +80,7 @@ public:
         bool PopWithTimeout(T& item, const std::chrono::milliseconds& timeout);
         void Push(const T& item);
         void Push(T&& item);
+        bool Peek(T& item);
         bool TryPush(const T& item);
         bool ForcePush(const T& item);
         bool ForcePush(const T&& item);
@@ -119,6 +120,20 @@ SharedQueue<T>::SharedQueue(size_t _nItems):
         m_producerCondition(),
         m_nMaxItems(_nItems)
 {}
+
+template <class T>
+bool SharedQueue<T>::Peek(T& _item)
+{      
+        std::unique_lock<std::mutex> mutexLock(m_mutex);
+        if (m_queue.empty()) {
+                return false;
+        }
+        if (!m_queue.empty()) {
+                _item = m_queue.back();
+                return true;
+        }
+        return false;
+}
 
 template <class T>
 bool SharedQueue<T>::PopWithTimeout(T& _item, const std::chrono::milliseconds& _timeout)
