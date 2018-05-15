@@ -381,13 +381,13 @@ static void libmuxerSetInputOpt(const std::shared_ptr<muxer::Input>& lin, const 
         auto w = jsonAsInt(opt["w"]);
         if (w <= 0) {
             Fatal("invalid w");
-            lin->SetOption("w", w);
         }
+        lin->SetOption("w", w);
         auto h = jsonAsInt(opt["h"]);
         if (h <= 0) {
             Fatal("invalid h");
-            lin->SetOption("h", h);
         }
+        lin->SetOption("h", h);
         auto x = opt["x"];
         if (!x.empty()) {
             lin->SetOption("x", jsonAsInt(x));
