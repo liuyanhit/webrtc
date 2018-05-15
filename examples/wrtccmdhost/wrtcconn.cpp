@@ -349,7 +349,7 @@ public:
 
 class AVBroadcasterStreamSink: public SinkObserver {
 public:
-    AVBroadcasterStreamSink(rtc::VideoBroadcaster *vsrc, AudioBroadcaster* asrc) : vsrc_(vsrc), asrc_(asrc) {}
+    AVBroadcasterStreamSink(rtc::VideoBroadcaster *vsrc, AudioBroadcaster* asrc) : vsrc_(vsrc), asrc_(asrc), audiobuf_() {}
 
     void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame) {
         AVFrame* avframe = frame->AvFrame();
@@ -375,14 +375,31 @@ public:
                                                 0 / rtc::kNumNanosecsPerMicrosec));
         } else {
             if (!av_sample_fmt_is_planar((AVSampleFormat)avframe->format)) {
-                auto bits_per_sample = av_get_bytes_per_sample((AVSampleFormat)avframe->format)*8;
-                asrc_->OnData(avframe->data[0], bits_per_sample, avframe->sample_rate, avframe->channels, avframe->nb_samples);
+                auto bytes_per_sample = av_get_bytes_per_sample((AVSampleFormat)avframe->format);
+                auto bits_per_sample = bytes_per_sample*8;
+
+                auto oldsize = audiobuf_.size();
+                audiobuf_.resize(oldsize + avframe->linesize[0]);
+                std::copy(avframe->data[0], avframe->data[0]+avframe->linesize[0], &audiobuf_[oldsize]);
+
+                auto samples10ms = size_t(avframe->sample_rate*0.01);
+                auto size10ms = samples10ms*bytes_per_sample;
+                size_t pos = 0;
+                while (pos+size10ms <= audiobuf_.size()) {
+                    asrc_->OnData(&audiobuf_[pos], bits_per_sample, avframe->sample_rate, avframe->channels, samples10ms);
+                    pos += size10ms;
+                }
+                std::copy(&audiobuf_[pos], &audiobuf_[audiobuf_.size()], &audiobuf_[0]);
+                audiobuf_.resize(audiobuf_.size()-pos);
+            } else {
+                Fatal("not planar format");
             }
         }
     }
 
     rtc::VideoBroadcaster* vsrc_;
     AudioBroadcaster* asrc_;
+    std::vector<uint8_t> audiobuf_;
 };
 
 bool WRTCConn::AddStream(SinkAddRemover* stream) {
