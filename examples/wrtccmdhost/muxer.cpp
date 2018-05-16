@@ -278,10 +278,6 @@ int AvMuxer::Start()
                                         }
                                 });
 
-                        if (videoFrames.size() == 0) {
-                                goto sleep;
-                        }
-
                         // background color
                         int nRGB;
                         if (GetOption(options::bgcolor, nRGB) == true) {
