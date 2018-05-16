@@ -134,7 +134,7 @@ int AvEncoder::PresetH264(IN const std::shared_ptr<MediaFrame>& _pFrame)
 
         pAvEncoderContext_->time_base.num = 1;
         pAvEncoderContext_->time_base.den = 25;
-        pAvEncoderContext_->gop_size = 150;
+        pAvEncoderContext_->gop_size = 50;
         pAvEncoderContext_->qmin = 10;
         pAvEncoderContext_->qmax = 51;
 
