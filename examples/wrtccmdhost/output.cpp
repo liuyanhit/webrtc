@@ -791,8 +791,6 @@ inline int ASC_SF_VALUE(int sf)
 RtmpSender::RtmpSender()
 {
         bytesSent_.store(0);
-        keepSpsPpsInNalus_ = true;
-        useAnnexbConcatNalus_ = true;
 }
 
 RtmpSender::~RtmpSender()
@@ -819,6 +817,8 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                         if (pFlvFile_->WriteHeader() < 0) {
                                 return -1;
                         }
+                        keepSpsPpsInNalus_ = true;
+                        useAnnexbConcatNalus_ = true;
                         dontSendMetadata_ = true;
                 }
         }
