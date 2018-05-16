@@ -273,11 +273,15 @@ int VideoRescaler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
                 auto fTargetRatio = static_cast<float>(nW_) / nH_;
 
                 if (fTargetRatio > fOrigRatio) {
-                        nZoomW_ = nZoomH_ * fOrigRatio;
-                        nZoomX_ = nW_ / 2 - nZoomW_ / 2;
-                } else if (fTargetRatio < fOrigRatio) {
+                        //nZoomW_ = nZoomH_ * fOrigRatio;
+                        //nZoomX_ = nW_ / 2 - nZoomW_ / 2;
                         nZoomH_ = nZoomW_ / fOrigRatio;
                         nZoomY_ = nH_ / 2 - nZoomH_ / 2;
+                } else if (fTargetRatio < fOrigRatio) {
+                        //nZoomH_ = nZoomW_ / fOrigRatio;
+                        //nZoomY_ = nH_ / 2 - nZoomH_ / 2;
+                        nZoomW_ = nZoomH_ * fOrigRatio;
+                        nZoomX_ = nW_ / 2 - nZoomW_ / 2;
                 } else {
                         bStretchMode_ = true;
                 }

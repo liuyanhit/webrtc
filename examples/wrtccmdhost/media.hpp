@@ -38,7 +38,7 @@ namespace muxer
                 static const AVPixelFormat PIXEL_FMT = AV_PIX_FMT_YUV420P;
         public:
                 VideoRescaler(IN int nWidth, IN int nHeight, IN const AVPixelFormat format = VideoRescaler::PIXEL_FMT,
-                              IN bool bStretchMode = true, IN int nBgColor = 0x0);
+                              IN bool bStretchMode = false, IN int nBgColor = 0x0);
                 ~VideoRescaler();
                 int Rescale(IN const std::shared_ptr<MediaFrame>& pInFrame, OUT std::shared_ptr<MediaFrame>& pOutFrame);
                 int Reset(IN int nWidth, IN int nHeight, IN const AVPixelFormat format = VideoRescaler::PIXEL_FMT,
