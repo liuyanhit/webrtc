@@ -6,8 +6,9 @@ using namespace muxer;
 // AvReceiver
 //
 
-AvReceiver::AvReceiver()
+AvReceiver::AvReceiver(std::shared_ptr<XLogger> xl)
 {
+        xl_ = xl;
 }
 
 AvReceiver::~AvReceiver()
@@ -19,10 +20,11 @@ AvReceiver::~AvReceiver()
 int AvReceiver::AvInterruptCallback(void* _pContext)
 {
         using namespace std::chrono;
-        AvReceiver* pReceiver = reinterpret_cast<AvReceiver*>(_pContext);
+        AvReceiver* pReceiver = reinterpret_cast<AvReceiver*>(_pContext);\
+        auto xl_ = pReceiver->xl_;
         high_resolution_clock::time_point now = high_resolution_clock::now();
         if (duration_cast<milliseconds>(now - pReceiver->start_).count() > pReceiver->nTimeout_) {
-                Error("receiver timeout, %lu milliseconds", pReceiver->nTimeout_);
+                XError("receiver timeout, %lu milliseconds", pReceiver->nTimeout_);
                 return -1;
         }
 
@@ -32,29 +34,29 @@ int AvReceiver::AvInterruptCallback(void* _pContext)
 int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callback)
 {
         if (pAvContext_ != nullptr) {
-                Warn("internal: reuse of Receiver is not recommended");
+                XWarn("internal: reuse of Receiver is not recommended");
         }
 
         // allocate AV context
         pAvContext_ = avformat_alloc_context();
         if (pAvContext_ == nullptr) {
-                Error("av context could not be created");
+                XError("av context could not be created");
                 return -1;
         }
 
         // for timeout timer
         std::string option;
         nTimeout_ = 10 * 1000; // 10 seconds
-        Info("receiver timeout=%lu milliseconds", nTimeout_);
+        XInfo("receiver timeout=%lu milliseconds", nTimeout_);
         pAvContext_->interrupt_callback.callback = AvReceiver::AvInterruptCallback;
         pAvContext_->interrupt_callback.opaque = this;
         start_ = std::chrono::high_resolution_clock::now();
 
         // open input stream
-        Info("input URL: %s", _url.c_str());
+        XInfo("input URL: %s", _url.c_str());
         int nStatus = avformat_open_input(&pAvContext_, _url.c_str(), 0, 0);
         if (nStatus < 0) {
-                Error("could not open input stream: %s, %s", av_err2str(nStatus), _url.c_str());
+                XError("could not open input stream: %s, %s", av_err2str(nStatus), _url.c_str());
                 sleep(1);
                 return -1;
         }
@@ -62,7 +64,7 @@ int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callb
         // get stream info
         nStatus = avformat_find_stream_info(pAvContext_, 0);
         if (nStatus < 0) {
-                Error("could not get stream info");
+                XError("could not get stream info");
                 return -1;
         }
 
@@ -71,7 +73,7 @@ int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callb
                 AVStream * pAvStream = pAvContext_->streams[i];
 
                 streams.push_back(pAvStream);
-                Info("stream is found: avstream=%d, avcodec=%d",
+                XInfo("stream is found: avstream=%d, avcodec=%d",
                      pAvStream->codecpar->codec_type, pAvStream->codecpar->codec_id);
         }
 
@@ -81,7 +83,7 @@ int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callb
                 if (av_read_frame(pAvContext_, pAvPacket) == 0) {
                         if (pAvPacket->stream_index < 0 ||
                             static_cast<unsigned int>(pAvPacket->stream_index) >= pAvContext_->nb_streams) {
-                                Warn("invalid stream index in packet");
+                                XWarn("invalid stream index in packet");
                                 av_packet_free(&pAvPacket);
                                 continue;
                         }
@@ -112,8 +114,9 @@ int AvReceiver::Receive(IN const std::string& _url, IN PacketHandlerType& _callb
 // AvDecoder
 //
 
-AvDecoder::AvDecoder()
+AvDecoder::AvDecoder(std::shared_ptr<XLogger> xl)
 {
+        xl_ = xl;
 }
 
 AvDecoder::~AvDecoder()
@@ -133,14 +136,14 @@ int AvDecoder::Init(IN const std::unique_ptr<MediaPacket>& _pPacket)
                 // find decoder
                 AVCodec *pAvCodec = avcodec_find_decoder(static_cast<AVCodecID>(_pPacket->Codec()));
                 if (pAvCodec == nullptr) {
-                        Error("could not find AV decoder for codec_id=%d", _pPacket->Codec());
+                        XError("could not find AV decoder for codec_id=%d", _pPacket->Codec());
                         return -1;
                 }
 
                 // initiate AVCodecContext
                 pAvDecoderContext_ = avcodec_alloc_context3(pAvCodec);
                 if (pAvDecoderContext_ == nullptr) {
-                        Error("could not allocate AV codec context");
+                        XError("could not allocate AV codec context");
                         return -1;
                 }
 
@@ -148,17 +151,17 @@ int AvDecoder::Init(IN const std::unique_ptr<MediaPacket>& _pPacket)
                 // just use context parameters in AVStream to get one directly otherwise fake one
                 if (_pPacket->AvCodecParameters() != nullptr) {
                         if (avcodec_parameters_to_context(pAvDecoderContext_, _pPacket->AvCodecParameters()) < 0){
-                                Error("could not copy decoder context");
+                                XError("could not copy decoder context");
                                 return -1;
                         }
                 }
 
                 // open it
                 if (avcodec_open2(pAvDecoderContext_, pAvCodec, nullptr) < 0) {
-                        Error("could not open decoder");
+                        XError("could not open decoder");
                         return -1;
                 } else {
-                        Info("open decoder: stream=%d, codec=%d", _pPacket->Stream(), _pPacket->Codec());
+                        XInfo("open decoder: stream=%d, codec=%d", _pPacket->Stream(), _pPacket->Codec());
                         bIsDecoderAvailable_ = true;
                 }
         }
@@ -182,10 +185,10 @@ int AvDecoder::Decode(IN const std::unique_ptr<MediaPacket>& _pPacket, IN FrameH
                 int nStatus = avcodec_send_packet(pAvDecoderContext_, _pPacket->AvPacket());
                 if (nStatus != 0) {
                         if (nStatus == AVERROR(EAGAIN)) {
-                                Warn("decoder internal: assert failed, we should not get EAGAIN");
+                                XWarn("decoder internal: assert failed, we should not get EAGAIN");
                                 bNeedSendAgain = true;
                         } else {
-                                Error("decoder: could not send frame, status=%d", nStatus);
+                                XError("decoder: could not send frame, status=%d", nStatus);
                                 _pPacket->Print();
                                 return -1;
                         }
@@ -209,7 +212,7 @@ int AvDecoder::Decode(IN const std::unique_ptr<MediaPacket>& _pPacket, IN FrameH
                         } else if (nStatus == AVERROR(EAGAIN)) {
                                 return 0;
                         } else {
-                                Error("decoder: could not receive frame, status=%d", nStatus);
+                                XError("decoder: could not receive frame, status=%d", nStatus);
                                 _pPacket->Print();
                                 return -1;
                         }
@@ -223,13 +226,14 @@ int AvDecoder::Decode(IN const std::unique_ptr<MediaPacket>& _pPacket, IN FrameH
 // Input
 //
 
-Input::Input(IN const std::string& _name)
+Input::Input(std::shared_ptr<XLogger> xl, IN const std::string& _name)
         :OptionMap(),
-        resampler_(),
+        resampler_(xl),
         name_(_name),
         videoQ_(Input::VIDEO_Q_LEN),
         audioQ_(Input::AUDIO_Q_LEN)
 {
+        xl_ = xl;
         bReceiverExit_.store(false);
 }
 
@@ -267,9 +271,9 @@ void Input::Start(IN const std::string& _url)
 {
         auto recv = [this, _url] {
                 while (bReceiverExit_.load() == false) {
-                        auto avReceiver = std::make_unique<AvReceiver>();
-                        auto vDecoder = std::make_unique<AvDecoder>();
-                        auto aDecoder = std::make_unique<AvDecoder>();
+                        auto avReceiver = std::make_unique<AvReceiver>(xl_);
+                        auto vDecoder = std::make_unique<AvDecoder>(xl_);
+                        auto aDecoder = std::make_unique<AvDecoder>(xl_);
 
                         auto receiverHook = [&](IN const std::unique_ptr<MediaPacket> _pPacket) -> int {
                                 if (bReceiverExit_.load() == true) {
@@ -352,7 +356,7 @@ void Input::SetVideo(const std::shared_ptr<MediaFrame>& _pFrame)
                         bNeedRescale = true;
                 }
                 if (bNeedRescale) {
-                        pRescaler_ = std::make_shared<VideoRescaler>(nW, nH);
+                        pRescaler_ = std::make_shared<VideoRescaler>(xl_, nW, nH);
                 }
         } else {
                 // if target w or h is changed, reinit the rescaler

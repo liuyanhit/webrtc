@@ -472,8 +472,8 @@ void CmdHost::handleStreamAddSink(const Json::Value& req, rtc::scoped_refptr<Cmd
         return;
     }
 
-    auto sink = new muxer::RtmpSink(url);
     auto sinkid = newReqId();
+    auto sink = new muxer::RtmpSink(url, std::make_shared<XLogger>(sinkid));
 
     auto kbps = jsonAsInt(req["kbps"]);
     if (kbps != 0) {
@@ -586,14 +586,15 @@ public:
 void CmdHost::handleNewUrlStream(const Json::Value& req, rtc::scoped_refptr<CmdDoneObserver> observer) {
     auto url = jsonAsString(req["url"]);
 
-    muxer::Input* input = new muxer::Input("");
+    auto stream_id = newReqId();
+
+    muxer::Input* input = new muxer::Input(std::make_shared<XLogger>(stream_id), "");
     input->nativeRate_ = true;
     input->doRescale_ = false;
     input->doResample_ = false;
     //input->resampler_.frameSize = int(muxer::AudioResampler::SAMPLE_RATE * 0.01);
     input->Start(url);
 
-    auto stream_id = newReqId();
     {
         std::lock_guard<std::mutex> lock(streams_map_lock_);
         streams_map_[stream_id] = input;

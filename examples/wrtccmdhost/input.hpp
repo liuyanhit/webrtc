@@ -11,9 +11,11 @@ namespace muxer
         class AvReceiver
         {
         public:
-                AvReceiver();
+                AvReceiver(std::shared_ptr<XLogger> xl);
                 ~AvReceiver();
                 int Receive(IN const std::string& url, IN PacketHandlerType& callback);
+                std::shared_ptr<XLogger> xl_ = nullptr;
+
         private:
                 static int AvInterruptCallback(void* pContext);
         private:
@@ -28,7 +30,7 @@ namespace muxer
         class AvDecoder
         {
         public:
-                AvDecoder();
+                AvDecoder(std::shared_ptr<XLogger> xl);
                 ~AvDecoder();
                 int Decode(IN const std::unique_ptr<MediaPacket>& pPacket, IN FrameHandlerType& callback);
         private:
@@ -36,13 +38,14 @@ namespace muxer
         private:
                 AVCodecContext* pAvDecoderContext_ = nullptr;
                 bool bIsDecoderAvailable_ = false;
+                std::shared_ptr<XLogger> xl_ = nullptr;
         };
 
         // Input
         class Input : public OptionMap, public Stream
         {
         public:
-                Input(IN const std::string& name);
+                Input(std::shared_ptr<XLogger> xl, IN const std::string& name);
                 ~Input();
                 std::string Name();
 
@@ -81,6 +84,8 @@ namespace muxer
                 SinkObserver *sink_;
                 std::string sink_id_;
                 std::function<void ()> onStop_;
+
+                std::shared_ptr<XLogger> xl_ = nullptr;
         };
 }
 

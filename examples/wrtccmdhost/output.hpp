@@ -10,7 +10,7 @@ namespace muxer
         class AvEncoder
         {
         public:
-                AvEncoder();
+                AvEncoder(std::shared_ptr<XLogger> xl);
                 ~AvEncoder();
                 int Encode(IN std::shared_ptr<MediaFrame>& pFrame, IN EncoderHandlerType& callback);
                 void Bitrate(IN int nBitrate);
@@ -29,6 +29,7 @@ namespace muxer
                 bool bIsEncoderAvailable_ = false;
                 std::vector<char> frameBuffer_;
                 SwrContext* pSwr_ = nullptr; // for resampling
+                std::shared_ptr<XLogger> xl_;
 
                 int nBitrate_ = 0;
         };
@@ -192,12 +193,14 @@ namespace muxer
         class RtmpSender final : public AvSender
         {
         public:
-                RtmpSender();
+                RtmpSender(std::shared_ptr<XLogger> xl);
+
                 ~RtmpSender();
                 virtual int Send(IN const std::string& url, IN const std::shared_ptr<MediaPacket>& pPacket);
                 std::atomic<int64_t> bytesSent_;
                 
         private:
+                std::shared_ptr<XLogger> xl_ = nullptr;
                 // send audio
                 int SendMp3Packet(IN const MediaPacket& packet);
                 int SendAacPacket(IN const MediaPacket& packet);
@@ -284,7 +287,7 @@ namespace muxer
 
         class RtmpSink: public SinkObserver {
         public:
-                RtmpSink(const std::string& url);
+                RtmpSink(const std::string& url, std::shared_ptr<XLogger> xl);
 
                 void OnStart();
                 void OnFrame(const std::shared_ptr<muxer::MediaFrame>& frame);
@@ -294,6 +297,7 @@ namespace muxer
                 }
 
                 int videoKbps = 1000;
+                std::shared_ptr<XLogger> xl_ = nullptr;
 
         private:
                 std::shared_ptr<RtmpSender> rtmpSender_; 
@@ -312,10 +316,10 @@ namespace muxer
                 Output(IN const std::string& name);
                 ~Output();
                 std::string Name();
-                void Start(IN const std::string& url);
                 void Start(IN FrameSender* stream);
                 void Stop();
                 bool Push(IN std::shared_ptr<MediaFrame>& pFrame);
+
         private:
                 FrameSender* stream_;
                 std::string name_;

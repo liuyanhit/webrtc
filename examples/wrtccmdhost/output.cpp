@@ -6,8 +6,9 @@ using namespace muxer;
 // AvEncoder
 //
 
-AvEncoder::AvEncoder()
+AvEncoder::AvEncoder(std::shared_ptr<XLogger> xl)
 {
+        xl_ = xl;
 }
 
 AvEncoder::~AvEncoder()
@@ -42,7 +43,7 @@ int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
                                 return 0;
                         }
                         Deinit();
-                        Info("video resolution change %dx%d -> %dx%d, reinit codec", oldw,oldh,neww,newh);
+                        XInfo("video resolution change %dx%d -> %dx%d, reinit codec", oldw,oldh,neww,newh);
                 } else {
                         return 0;
                 }
@@ -57,14 +58,14 @@ int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
         }
 
         if (pAvCodec == nullptr) {
-                Error("could not find encoder");
+                XError("could not find encoder");
                 return -1;
         }
 
         // initiate AVCodecContext
         pAvEncoderContext_ = avcodec_alloc_context3(pAvCodec);
         if (pAvEncoderContext_ == nullptr) {
-                Error("could not allocate AV codec context for encoder");
+                XError("could not allocate AV codec context for encoder");
                 return -1;
         }
 
@@ -73,11 +74,11 @@ int AvEncoder::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
 
         // open encoder
         if (avcodec_open2(pAvEncoderContext_, pAvCodec, nullptr) < 0) {
-                Error("could not open encoder");
+                XError("could not open encoder");
                 pAvEncoderContext_ = nullptr;
                 return -1;
         } else {
-                Verbose("open encoder: stream=%d, codec=%d", _pFrame->Stream(), _pFrame->Codec());
+                XInfo("open encoder: stream=%d, codec=%d", _pFrame->Stream(), _pFrame->Codec());
                 bIsEncoderAvailable_ = true;
         }
 
@@ -89,7 +90,7 @@ int AvEncoder::Preset(IN const std::shared_ptr<MediaFrame>& _pFrame)
         switch(_pFrame->Codec()) {
         case CODEC_AAC: return PresetAac(_pFrame);
         case CODEC_H264: return PresetH264(_pFrame);
-        default: Verbose("no preset");
+        default: XError("no preset");
         }
         return -1;
 }
@@ -108,7 +109,7 @@ int AvEncoder::PresetAac(IN const std::shared_ptr<MediaFrame>& _pFrame)
                 pAvEncoderContext_->bit_rate = 128000;
         }
 
-        Verbose("default aac preset: sample_fmt=s16, sample_rate=%d, channels=%d, bit_rate=%d",
+        XInfo("default aac preset: sample_fmt=s16, sample_rate=%d, channels=%d, bit_rate=%d",
              pAvEncoderContext_->sample_rate, pAvEncoderContext_->channels, (int)pAvEncoderContext_->bit_rate);
 
         // reserve buffer
@@ -121,7 +122,7 @@ int AvEncoder::PresetAac(IN const std::shared_ptr<MediaFrame>& _pFrame)
 
 int AvEncoder::PresetH264(IN const std::shared_ptr<MediaFrame>& _pFrame)
 {
-        Verbose("default h.264 preset: width=%d, height=%d", _pFrame->AvFrame()->width, _pFrame->AvFrame()->height);
+        XInfo("default h.264 preset: width=%d, height=%d", _pFrame->AvFrame()->width, _pFrame->AvFrame()->height);
 
         pAvEncoderContext_->pix_fmt = AV_PIX_FMT_YUV420P;
 
@@ -160,7 +161,7 @@ int AvEncoder::Encode(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHandler
         switch(_pFrame->Codec()) {
         case CODEC_AAC: return EncodeAac(_pFrame, _callback);
         case CODEC_H264: return EncodeH264(_pFrame, _callback);
-        default: Verbose("no preset");
+        default: XError("no preset");
         }
         return -1;        
 }
@@ -257,7 +258,7 @@ int AvEncoder::EncodeAac(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHand
                         } else if (nStatus == AVERROR(EAGAIN)) {
                                 break; // goto receive packet
                         } else {
-                                Error("aac encoder: could not send frame, status=%d", nStatus);
+                                XError("aac encoder: could not send frame, status=%d", nStatus);
                                 return -1;
                         }
                 }
@@ -281,7 +282,7 @@ int AvEncoder::EncodeAac(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHand
                         } else if (nStatus == AVERROR(EAGAIN)) {
                                 break; // back to send packet
                         } else {
-                                Error("aac encoder: could not receive frame, status=%d", nStatus);
+                                XError("aac encoder: could not receive frame, status=%d", nStatus);
                                 pPacket->Print();
                                 return -1;
                         }
@@ -304,7 +305,7 @@ int AvEncoder::EncodeH264(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHan
                                 //Warn("internal: assert failed, we should not get EAGAIN");
                                 bNeedSendAgain = true;
                         } else {
-                                Error("h264 encoder: could not send frame, status=%d", nStatus);
+                                XError("h264 encoder: could not send frame, status=%d", nStatus);
                                 return -1;
                         }
                 }
@@ -330,7 +331,7 @@ int AvEncoder::EncodeH264(IN std::shared_ptr<MediaFrame>& _pFrame, IN EncoderHan
                         } else if (nStatus == AVERROR(EAGAIN)) {
                                 return 0;
                         } else {
-                                Error("h264 encoder: could not receive frame, status=%d", nStatus);
+                                XError("h264 encoder: could not receive frame, status=%d", nStatus);
                                 pPacket->Print();
                                 return -1;
                         }
@@ -788,8 +789,9 @@ inline int ASC_SF_VALUE(int sf)
 #define ASC_CHAN_FCLR_SLR_BLR_LFE 7
 #define ASC_CHAN_RESERVED         8
 
-RtmpSender::RtmpSender()
+RtmpSender::RtmpSender(std::shared_ptr<XLogger> xl)
 {
+        xl_ = xl;
         bytesSent_.store(0);
 }
 
@@ -809,7 +811,7 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                         pRtmp_ = RTMP_Alloc();
                         RTMP_Init(pRtmp_);
                 } else {
-                        Info("flv: create %s", url.c_str());
+                        XInfo("flv: create %s", url.c_str());
                         pFlvFile_ = FlvFile::Create(url);
                         if (pFlvFile_ == nullptr) {
                                 return -1;
@@ -827,33 +829,33 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
         if (pRtmp_ != nullptr && RTMP_IsConnected(pRtmp_) == 0) {
                 url_ = url;
 
-                Info("rtmp: connecting to %s...", url_.c_str());
+                XInfo("rtmp: connecting to %s...", url_.c_str());
                 const int sleeptime = 1;
 
                 if (RTMP_SetupURL(pRtmp_, const_cast<char*>(url_.c_str())) == 0) {
-                        Error("rtmp: setup URL");
+                        XError("rtmp: setup URL");
                         sleep(sleeptime);
                         return -1;
                 }
                 RTMP_EnableWrite(pRtmp_);
                 if (RTMP_Connect(pRtmp_, nullptr) == 0) {
-                        Error("rtmp: connect");
+                        XError("rtmp: connect");
                         sleep(sleeptime);
                         return -1;
                 }
                 if (RTMP_ConnectStream(pRtmp_, 0) == 0) {
-                        Error("rtmp: connect stream");
+                        XError("rtmp: connect stream");
                         sleep(sleeptime);
                         return -1;
                 }
 
                 if (SendChunkSize(4096) < 0) {
-                        Error("rtmp: chunk size not sent");
+                        XError("rtmp: chunk size not sent");
                         sleep(sleeptime);
                         return -1;
                 }
 
-                Info("rtmp: connection is established");
+                XInfo("rtmp: connection is established");
         }
 
         if (!dontSendMetadata_) {
@@ -873,7 +875,7 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                 nStatus = SendMetadataPacket(*_pPacket); break;
         default:
                 if (_pPacket->Stream() == STREAM_AUDIO || _pPacket->Stream() == STREAM_VIDEO) {
-                        Warn("rtmp: stream=%d, codec=%d not supported", _pPacket->Stream(), _pPacket->Codec());
+                        XWarn("rtmp: stream=%d, codec=%d not supported", _pPacket->Stream(), _pPacket->Codec());
                 }
                 return 0; // do nothing
         }
@@ -953,7 +955,7 @@ int RtmpSender::SendAacConfig(IN const MediaPacket& _packet)
                 nSfIndex = adts.nSfIndex;
                 nChannel = adts.nChannelConfiguration;
         } else {
-                Warn("aac seq header: no adts header, use default configuration");
+                XWarn("aac seq header: no adts header, use default configuration");
                 nProfile = ASC_OBJTYPE_AAC_LC;
                 nSfIndex = ASC_SF_44100;
                 nChannel = ASC_CHAN_FLR;
@@ -967,7 +969,7 @@ int RtmpSender::SendAacConfig(IN const MediaPacket& _packet)
         body[2] = (nAudioSpecConfig & 0xff00) >> 8;
         body[3] = nAudioSpecConfig & 0xff;
 
-        Info("aac: seq header format: profile=%d, sf=%d, channel=%d", nProfile, nSfIndex, nChannel);
+        XInfo("aac: seq header format: profile=%d, sf=%d, channel=%d", nProfile, nSfIndex, nChannel);
         return SendPacketLarge(RTMP_PACKET_TYPE_AUDIO, body.data(), body.size(), 0);
 }
 
@@ -1026,7 +1028,7 @@ int RtmpSender::SendH264Packet(IN const MediaPacket& _packet)
         std::vector<H264Nalu> nalus;
         GetH264Nalu(_packet, nalus);
         if (nalus.size() == 0) {
-                Warn("no h264 frames in the packet");
+                XWarn("no h264 frames in the packet");
                 _packet.Print();
                 return 0; // drop this packet
         }
@@ -1035,7 +1037,7 @@ int RtmpSender::SendH264Packet(IN const MediaPacket& _packet)
                 // send sequence header
                 if (!bH264ConfigSent_ && pSps_ != nullptr && pPps_!= nullptr) {
                         if (SendH264Config(_packet) != 0) {
-                                Warn("h264 sequence header: not sent");
+                                XWarn("h264 sequence header: not sent");
                                 return 1; // send next time
                         }
                         bH264ConfigSent_ = true;
@@ -1065,7 +1067,7 @@ int RtmpSender::SendH264Packet(IN const MediaPacket& _packet)
                         continue;
                 default:
                         // not a data packet, drop it
-                        Debug("h264: nalu type not handled, type=%d", it->Type());
+                        XDebug("h264: nalu type not handled, type=%d", it->Type());
                         it = nalus.erase(it);
                         continue;
                 }
@@ -1108,7 +1110,7 @@ int RtmpSender::SendH264Nalus(IN const std::vector<H264Nalu>& _nalus, IN const M
 int RtmpSender::SendH264Config(IN const MediaPacket& _packet)
 {
         if (pSps_ == nullptr || pPps_ == nullptr) {
-                Warn("internal: sps or pps not found");
+                XWarn("internal: sps or pps not found");
                 return -1;
         }
 
@@ -1149,7 +1151,7 @@ int RtmpSender::SendH264Config(IN const MediaPacket& _packet)
         std::copy(pPps_->Data(), pPps_->Data() + pPps_->Size(), &body[i]);
         i += pPps_->Size();
 
-        Info("h264: seq header: sps_size=%d, pps_size=%d", pSps_->Size(), pPps_->Size());
+        XInfo("h264: seq header: sps_size=%d, pps_size=%d", pSps_->Size(), pPps_->Size());
         return SendPacketLarge(RTMP_PACKET_TYPE_VIDEO, body.data(), i, 0);
 }
 
@@ -1261,7 +1263,7 @@ int RtmpSender::SendStreamMetaInfo(IN const MediaPacket& _packet)
         meta.PutByte(AMF_OBJECT_END);
 
         if (SendPacket(RTMP_PACKET_TYPE_INFO, meta.Data(), meta.Size(), 0) < 0) {
-                Warn("metadata information not sent, stream=%d, codec=%d", _packet.Stream(), _packet.Codec());
+                XWarn("metadata information not sent, stream=%d, codec=%d", _packet.Stream(), _packet.Codec());
                 return -1;
         } else {
                 if (_packet.Stream() == STREAM_AUDIO) {
@@ -1351,13 +1353,13 @@ int RtmpSender::SendRawPacket(IN unsigned int _nPacketType, IN int _nHeaderType,
                 nCalculated = 0;
                 break;
         default:
-                Warn("internal: rtmp packet type=%d not recognized", _nPacketType);
+                XWarn("internal: rtmp packet type=%d not recognized", _nPacketType);
                 return -1;
         }
         packet.m_nTimeStamp = _nTimestamp;
 
         if (nCalculated < 0) {
-                Warn("drop packet with abnormal pts=%lu", _nTimestamp);
+                XWarn("drop packet with abnormal pts=%lu", _nTimestamp);
                 return 0;
         }
 
@@ -1386,7 +1388,7 @@ out_free:
 ssize_t RtmpSender::AccTimestamp(IN const size_t& _nNow, OUT size_t& _nBase, OUT size_t& _nSequence)
 {
         if (static_cast<ssize_t>(_nNow) < 0) {
-                Warn("nagative pts=%lu", _nNow);
+                XWarn("nagative pts=%lu", _nNow);
                 return -1;
         }
 
@@ -1402,23 +1404,24 @@ ssize_t RtmpSender::AccTimestamp(IN const size_t& _nNow, OUT size_t& _nBase, OUT
         return nTimestamp;
 }
 
-RtmpSink::RtmpSink(const std::string& url): 
+RtmpSink::RtmpSink(const std::string& url, std::shared_ptr<XLogger> xl): 
         muxedQ_(100),
         audiobufQ_(100),
         videobufQ_(100),
-        resampler_()
+        resampler_(xl)
 
 {
         url_ = url;
         bSenderExit_.store(false);
-        rtmpSender_ = std::make_unique<RtmpSender>();
+        rtmpSender_ = std::make_unique<RtmpSender>(xl);
+        xl_ = xl;
 }
 
 void RtmpSink::OnStart() {
         auto snd = [&] {
                 while (bSenderExit_.load() == false) {
-                        auto vEncoder = std::make_unique<AvEncoder>();
-                        auto aEncoder = std::make_unique<AvEncoder>();
+                        auto vEncoder = std::make_unique<AvEncoder>(xl_);
+                        auto aEncoder = std::make_unique<AvEncoder>(xl_);
 
                         vEncoder->Bitrate(videoKbps);
 
@@ -1541,65 +1544,6 @@ void Output::Start(IN FrameSender* stream) {
                 return true;
         };
         onStop_ = [&]() {};
-}
-
-void Output::Start(IN const std::string& _url)
-{
-        auto snd = [this, _url] {
-                while (bSenderExit_.load() == false) {
-                        auto vEncoder = std::make_unique<AvEncoder>();
-                        auto aEncoder = std::make_unique<AvEncoder>();
-                        auto avSender = std::make_unique<RtmpSender>();
-
-                        int nVideoBitrate, nAudioBitrate;
-                        if (GetOption(options::vbitrate, nVideoBitrate) == true) {
-                                vEncoder->Bitrate(nVideoBitrate);
-                        }
-                        if (GetOption(options::abitrate, nAudioBitrate) == true) {
-                                aEncoder->Bitrate(nAudioBitrate);
-                        }
-
-                        auto encoderHook = [&](IN const std::shared_ptr<MediaPacket>& _pPacket) -> int {
-                                if (bSenderExit_.load() == true) {
-                                        return -1;
-                                }
-                                return avSender->Send(_url, _pPacket);
-                        };
-
-                        while (bSenderExit_.load() == false) {
-                                std::shared_ptr<MediaFrame> pFrame;
-                                if (muxedQ_.PopWithTimeout(pFrame, std::chrono::milliseconds(10)) == false) {
-                                        continue;
-                                }
-                                Verbose("OutputQueueSize %zu", muxedQ_.Size());
-
-                                int nStatus = 0;
-                                if (pFrame->Stream() == STREAM_VIDEO) {
-                                        nStatus = vEncoder->Encode(pFrame, encoderHook);
-                                } else if (pFrame->Stream() == STREAM_AUDIO) {
-                                        DebugPCM("/tmp/rtc.out.s16", pFrame->AvFrame()->data[0], pFrame->AvFrame()->linesize[0]);
-                                        nStatus = aEncoder->Encode(pFrame, encoderHook);
-                                }
-
-                                if (nStatus != 0) {
-                                        break;
-                                }
-                        }
-                }
-        };
-
-        sender_ = std::thread(snd);
-
-        onFrame_ = [&](IN std::shared_ptr<MediaFrame>& pFrame) {
-                return muxedQ_.TryPush(pFrame);
-        };
-
-        onStop_ = [&]() {
-                bSenderExit_.store(true);
-                if (sender_.joinable()) {
-                        sender_.join();
-                }
-        };
 }
 
 void Output::Stop()

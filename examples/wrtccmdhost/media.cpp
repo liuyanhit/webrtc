@@ -9,8 +9,9 @@ using namespace muxer;
 const int AudioResampler::CHANNELS;
 const AVSampleFormat AudioResampler::SAMPLE_FMT;
 
-AudioResampler::AudioResampler()
+AudioResampler::AudioResampler(std::shared_ptr<XLogger> xl)
 {
+        xl_ = xl;
 }
 
 AudioResampler::~AudioResampler()
@@ -23,7 +24,7 @@ AudioResampler::~AudioResampler()
 int AudioResampler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
 {
         if (pSwr_ != nullptr) {
-                Warn("internal: resampler: already init");
+                XWarn("internal: resampler: already init");
                 return -1;
         }
 
@@ -34,7 +35,7 @@ int AudioResampler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
         if (_pFrame->AvFrame()->format != AudioResampler::SAMPLE_FMT ||
             _pFrame->AvFrame()->channel_layout != AudioResampler::CHANNEL_LAYOUT ||
             _pFrame->AvFrame()->sample_rate != AudioResampler::SAMPLE_RATE) {
-                Info("input sample_format=%d, need sample_format=%d, initiate resampling",
+                XInfo("input sample_format=%d, need sample_format=%d, initiate resampling",
                      _pFrame->AvFrame()->format, AudioResampler::SAMPLE_FMT);
                 pSwr_ = swr_alloc();
                 av_opt_set_int(pSwr_, "in_channel_layout", av_get_default_channel_layout(_pFrame->AvFrame()->channels), 0);
@@ -44,7 +45,7 @@ int AudioResampler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
                 av_opt_set_sample_fmt(pSwr_, "in_sample_fmt", static_cast<AVSampleFormat>(_pFrame->AvFrame()->format), 0);
                 av_opt_set_sample_fmt(pSwr_, "out_sample_fmt", AudioResampler::SAMPLE_FMT,  0);
                 if (swr_init(pSwr_) != 0) {
-                        Error("could not initiate resampling");
+                        XError("could not initiate resampling");
                         return -1;
                 }
                 // save original audio attributes
@@ -124,7 +125,7 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
         // initial
         if (pSwr_ == nullptr) {
                 if (Init(_pInFrame) != 0) {
-                        Error("could not init resampling");
+                        XError("could not init resampling");
                         return -1;
                 }
         }
@@ -132,7 +133,7 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
         if (_pInFrame->AvFrame()->sample_rate != nOrigSamplerate_ ||
             _pInFrame->AvFrame()->channels != nOrigChannels_ ||
             _pInFrame->AvFrame()->format != nOrigForamt_) {
-                Info("resampler: audio parameters have changed, sr=%d, ch=%d, fmt=%d -> sr=%d, ch=%d, fmt=%d", nOrigSamplerate_,
+                XInfo("resampler: audio parameters have changed, sr=%d, ch=%d, fmt=%d -> sr=%d, ch=%d, fmt=%d", nOrigSamplerate_,
                      nOrigChannels_, nOrigForamt_, _pInFrame->AvFrame()->sample_rate, _pInFrame->AvFrame()->channels,
                      _pInFrame->AvFrame()->format);
                 // reset the resampler
@@ -156,7 +157,7 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
         nRetVal = av_samples_alloc_array_and_samples(&pDstData, &nDstLinesize, AudioResampler::CHANNELS,
                                                  nDstNbSamples, AudioResampler::SAMPLE_FMT, 0);
         if (nRetVal < 0) {
-                Error("resampler: could not allocate destination samples");
+                XError("resampler: could not allocate destination samples");
                 return -1;
         }
 
@@ -168,7 +169,7 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
                 nRetVal = av_samples_alloc(pDstData, &nDstLinesize, AudioResampler::CHANNELS,
                                            nDstNbSamples, AudioResampler::SAMPLE_FMT, 1);
                 if (nRetVal < 0) {
-                        Error("resampler: could not allocate sample buffer");
+                        XError("resampler: could not allocate sample buffer");
                         return -1;
                 }
                 nMaxDstNbSamples = nDstNbSamples;
@@ -178,14 +179,14 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
         nRetVal = swr_convert(pSwr_, pDstData, nDstNbSamples, (const uint8_t **)_pInFrame->AvFrame()->extended_data,
                               _pInFrame->AvFrame()->nb_samples);
         if (nRetVal < 0) {
-                Error("resampler: converting failed");
+                XError("resampler: converting failed");
                 return -1;
         }
 
         // get output buffer size
         nDstBufSize = av_samples_get_buffer_size(&nDstLinesize, AudioResampler::CHANNELS, nRetVal, AudioResampler::SAMPLE_FMT, 1);
         if (nDstBufSize < 0) {
-                Error("resampler: could not get sample buffer size");
+                XError("resampler: could not get sample buffer size");
                 return -1;
         }
 
@@ -210,11 +211,13 @@ int AudioResampler::Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OU
 // TODO delete
 const AVPixelFormat VideoRescaler::PIXEL_FMT;
 
-VideoRescaler::VideoRescaler(IN int _nWidth, IN int _nHeight, IN const AVPixelFormat _format,
+VideoRescaler::VideoRescaler(std::shared_ptr<XLogger> xl, IN int _nWidth, IN int _nHeight, IN const AVPixelFormat _format,
                              IN bool _bStretchMode, IN int _nBgColor)
 {
+        xl_ = xl;
+
         if (_nWidth <= 0 || _nHeight <= 0) {
-                Error("rescale: resize to width=%d, height=%d", _nWidth, _nHeight);
+                XError("rescale: resize to width=%d, height=%d", _nWidth, _nHeight);
                 return;
         }
 
@@ -236,7 +239,7 @@ int VideoRescaler::Reset(IN int _nWidth, IN int _nHeight, IN const AVPixelFormat
                          IN bool _bStretchMode, IN int _nBgColor)
 {
         if (_nWidth <= 0 || _nHeight <= 0) {
-                Error("rescale: resize to width=%d, height=%d", _nWidth, _nHeight);
+                XError("rescale: resize to width=%d, height=%d", _nWidth, _nHeight);
                 return -1;
         }
 
@@ -257,14 +260,14 @@ int VideoRescaler::Reset(IN int _nWidth, IN int _nHeight, IN const AVPixelFormat
 int VideoRescaler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
 {
         if (pSws_ != nullptr) {
-                Warn("internal: rescale: already init");
+                XWarn("internal: rescale: already init");
                 return -1;
         }
 
         auto pAvf = _pFrame->AvFrame();
         nZoomW_ = nW_, nZoomH_ = nH_, nZoomX_ = 0, nZoomY_ = 0;
 
-        Info("input color_space=%d, need color_space=%d, resize_to=%dx%d, stretch=%d initiate rescaling",
+        XInfo("input color_space=%d, need color_space=%d, resize_to=%dx%d, stretch=%d initiate rescaling",
              pAvf->format, format_, nW_, nH_, bStretchMode_);
 
         // non-stretch mode keeps constant aspect ratio, need calculate proper width and height
@@ -292,7 +295,7 @@ int VideoRescaler::Init(IN const std::shared_ptr<MediaFrame>& _pFrame)
                                static_cast<AVPixelFormat>(pAvf->format), nZoomW_, nZoomH_, format_,
                                SWS_BICUBIC, nullptr, nullptr, nullptr);
         if (pSws_ == nullptr) {
-                Error("rescaler initialization failed");
+                XError("rescaler initialization failed");
                 return -1;
         }
 
@@ -316,10 +319,10 @@ int VideoRescaler::Rescale(IN const std::shared_ptr<MediaFrame>& _pInFrame, OUT 
         // the incoming frame resolution changed, reinit the sws
         if (_pInFrame->AvFrame()->width != nOrigW_ || _pInFrame->AvFrame()->height != nOrigH_ ||
             _pInFrame->AvFrame()->format != origFormat_) {
-                Info("rescaler: video parameters have changed, w=%d, h=%d, fmt=%d -> w=%d, h=%d, fmt=%d", nOrigW_, nOrigH_,
+                XInfo("rescaler: video parameters have changed, w=%d, h=%d, fmt=%d -> w=%d, h=%d, fmt=%d", nOrigW_, nOrigH_,
                      origFormat_, _pInFrame->AvFrame()->width, _pInFrame->AvFrame()->height, _pInFrame->AvFrame()->format);
                 if (Reset(nW_, nH_, format_) != 0) {
-                        Error("rescaler: reinit failed");
+                        XError("rescaler: reinit failed");
                         return -2;
                 }
                 if (Init(_pInFrame) != 0) {
@@ -336,7 +339,7 @@ int VideoRescaler::Rescale(IN const std::shared_ptr<MediaFrame>& _pInFrame, OUT 
         int nStatus = sws_scale(pSws_, _pInFrame->AvFrame()->data, _pInFrame->AvFrame()->linesize, 0,
                                 _pInFrame->AvFrame()->height, pRescaled->AvFrame()->data, pRescaled->AvFrame()->linesize);
         if (nStatus < 0) {
-                Error("rescale: failed, status=%d", nStatus);
+                XError("rescale: failed, status=%d", nStatus);
                 return -1;
         }
 
@@ -378,7 +381,6 @@ void sound::Gain(INOUT const std::shared_ptr<MediaFrame>& _pFrame, IN int _nPerc
 void sound::Gain(INOUT const uint8_t* _pData, IN int _nSize, IN int _nPercent)
 {
         if (_nSize <= 0 || _nSize % 2 != 0) {
-                Warn("gain: size not positive or size is not even");
                 return;
         }
         if (_nPercent < 0) {

@@ -19,7 +19,7 @@ public:
     }
 
     static void TestH264ResChangeEncodeFlv() {
-        auto s = new muxer::RtmpSink("/tmp/t.flv");
+        auto s = new muxer::RtmpSink("/tmp/t.flv", std::make_shared<XLogger>());
         s->OnStart();
 
         int ts_ms = 0;

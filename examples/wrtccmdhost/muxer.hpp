@@ -37,16 +37,12 @@ namespace muxer
                 ~AvMuxer();
 
                 int AddOutput(IN const std::string& name, IN FrameSender* stream);
-                int AddOutput(IN const std::string& name, IN const std::string& url);
-                int AddOutput(IN const std::string& name, IN const std::string& url, IN const Option& opt);
                 int ModOutputOption(IN const std::string& name, IN const std::string& key, IN const std::string& val = "");
                 int ModOutputOption(IN const std::string& name, IN const std::string& key, IN int nVal);
                 int DelOutputOption(IN const std::string& name, IN const std::string& key);
                 int RemoveOutput(IN const std::string& name);
 
                 int AddInput(IN const std::string& name, IN SinkAddRemover *stream);
-                int AddInput(IN const std::string& name, IN const std::string& url);
-                int AddInput(IN const std::string& name, IN const std::string& url, IN const Option& opt);
                 int ModInputOption(IN const std::string& name, IN const std::string& key, IN const std::string& val = "");
                 int ModInputOption(IN const std::string& name, IN const std::string& key, IN int nVal);
                 int DelInputOption(IN const std::string& name, IN const std::string& key);

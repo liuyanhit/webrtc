@@ -16,7 +16,7 @@ namespace muxer
                 static const int DEFAULT_FRAME_SIZE = 1024;
                 static const int SAMPLE_RATE = 44100;
         public:
-                AudioResampler();
+                AudioResampler(std::shared_ptr<XLogger> xl);
                 ~AudioResampler();
                 int Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, OUT std::vector<uint8_t>& buffer);
                 int Resample(IN const std::shared_ptr<MediaFrame>& _pInFrame, std::function<void (const std::shared_ptr<MediaFrame>& out)> callback);
@@ -29,6 +29,7 @@ namespace muxer
                 SwrContext* pSwr_ = nullptr; // for resampling
                 int nOrigSamplerate_, nOrigChannels_, nOrigForamt_;
                 std::vector<uint8_t> sampleBuffer_;
+                std::shared_ptr<XLogger> xl_ = nullptr;
         };
 
         class VideoRescaler
@@ -37,7 +38,7 @@ namespace muxer
                 // TODO move following default values
                 static const AVPixelFormat PIXEL_FMT = AV_PIX_FMT_YUV420P;
         public:
-                VideoRescaler(IN int nWidth, IN int nHeight, IN const AVPixelFormat format = VideoRescaler::PIXEL_FMT,
+                VideoRescaler(std::shared_ptr<XLogger> xl, IN int nWidth, IN int nHeight, IN const AVPixelFormat format = VideoRescaler::PIXEL_FMT,
                               IN bool bStretchMode = false, IN int nBgColor = 0x0);
                 ~VideoRescaler();
                 int Rescale(IN const std::shared_ptr<MediaFrame>& pInFrame, OUT std::shared_ptr<MediaFrame>& pOutFrame);
@@ -48,6 +49,7 @@ namespace muxer
         private:
                 int Init(IN const std::shared_ptr<MediaFrame>& pFrame);
         private:
+                std::shared_ptr<XLogger> xl_ = nullptr;
                 SwsContext* pSws_ = nullptr;
                 int nW_, nH_, nOrigW_, nOrigH_;
                 AVPixelFormat format_, origFormat_;

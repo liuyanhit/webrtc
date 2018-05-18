@@ -77,6 +77,16 @@ extern "C"
                 }                                                       \
         } while(0)
 
+#define XLogFormat(level, levelstr, xl, fmt, arg...)                              \
+        if (xl) { \
+                LogFormat(level, levelstr, xl->reqid_.c_str(), fmt, ##arg); \
+        }
+
+#define XError(fmt, arg...) XLogFormat(2, "ERROR", xl_, fmt, ##arg)
+#define XWarn(fmt, arg...) XLogFormat(3, "WARN", xl_, fmt, ##arg)
+#define XInfo(fmt, arg...) XLogFormat(4, "INFO", xl_, fmt, ##arg)
+#define XDebug(fmt, arg...) XLogFormat(5, "DEBUG", xl_, fmt, ##arg)
+
 #define Fatal(fmt, arg...)                                              \
         do {                                                            \
                 LogFormat(1, "FATAL", NULL, fmt, ##arg);                          \

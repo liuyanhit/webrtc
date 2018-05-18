@@ -346,4 +346,17 @@ static inline int fpwrite(FILE *fp, void *buf, size_t len) {
         return fwrite(buf, 1, len, fp) != len ? -1 : 0;
 }
 
+class XLogger {
+public:
+    XLogger() {
+        reqid_ = newReqId();
+    }
+    
+    XLogger(const std::string reqid) {
+        reqid_ = reqid;
+    }
+
+    std::string reqid_;
+};
+
 #endif

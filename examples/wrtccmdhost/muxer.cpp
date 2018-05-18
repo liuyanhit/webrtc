@@ -90,27 +90,10 @@ AvMuxer::~AvMuxer()
 {
 }
 
-int AvMuxer::AddOutput(IN const std::string& _name, IN const std::string& _url)
-{
-        auto r = std::make_shared<Output>(_name);
-        r->Start(_url);
-        outputs_.Push(std::move(r));
-        return 0;
-}
-
 int AvMuxer::AddOutput(IN const std::string& _name, IN FrameSender* stream)
 {
         auto r = std::make_shared<Output>(_name);
         r->Start(stream);
-        outputs_.Push(std::move(r));
-        return 0;
-}
-
-int AvMuxer::AddOutput(IN const std::string& _name, IN const std::string& _url, IN const Option& _opt)
-{
-        auto r = std::make_shared<Output>(_name);
-        r->GetOptions(_opt);
-        r->Start(_url);
         outputs_.Push(std::move(r));
         return 0;
 }
@@ -156,27 +139,11 @@ int AvMuxer::RemoveOutput(IN const std::string& _key)
         return 0;
 }
 
-int AvMuxer::AddInput(IN const std::string& _name, IN const std::string& _url)
-{
-        auto r = std::make_shared<Input>(_name);
-        r->Start(_url);
-        inputs_.Push(std::move(r));
-        return 0;
-}
 
 int AvMuxer::AddInput(IN const std::string& _name, IN SinkAddRemover *stream)
 {
-        auto r = std::make_shared<Input>(_name);
+        auto r = std::make_shared<Input>(std::make_shared<XLogger>(_name), _name);
         r->Start(stream);
-        inputs_.Push(std::move(r));
-        return 0;
-}
-
-int AvMuxer::AddInput(IN const std::string& _name, IN const std::string& _url, IN const Option& _opt)
-{
-        auto r = std::make_shared<Input>(_name);
-        r->GetOptions(_opt);
-        r->Start(_url);
         inputs_.Push(std::move(r));
         return 0;
 }
