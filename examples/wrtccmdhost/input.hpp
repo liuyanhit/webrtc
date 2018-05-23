@@ -70,7 +70,7 @@ namespace muxer
         private:
                 int64_t lastpts_ = 0;
                 static const size_t AUDIO_Q_LEN = 100;
-                static const size_t VIDEO_Q_LEN = 10;
+                static const size_t VIDEO_Q_LEN = 1;
                 std::string name_;
                 std::thread receiver_;
                 std::atomic<bool> bReceiverExit_;

@@ -50,7 +50,6 @@ void OptionMap::SetOption(IN const std::string& _key, IN const std::string& _val
 void OptionMap::SetOption(IN const std::string& _key, IN int _val)
 {
         std::lock_guard<std::mutex> lock(paramsLck_);
-
         intparams_[_key] = _val;
 }
 
@@ -239,8 +238,9 @@ int AvMuxer::Start()
                         }
                         inputs_.Foreach([&](std::shared_ptr<Input>& _pInput){
                                         std::shared_ptr<MediaFrame> pFrame;
-                                        if (_pInput->GetOption(options::hidden) == false &&
-                                            _pInput->GetVideo(pFrame, nQlen) == true) {
+                                        int hidden = 1;
+                                        _pInput->GetOption(options::hidden, hidden);
+                                        if (!hidden && _pInput->GetVideo(pFrame, nQlen)) {
                                                 videoFrames.push_back(pFrame);
                                         }
                                 });
