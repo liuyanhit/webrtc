@@ -404,6 +404,10 @@ static void libmuxerSetInputOpt(const std::shared_ptr<muxer::Input>& lin, const 
         if (!hidden.empty()) {
             lin->SetOption("hidden", jsonAsBool(hidden));
         }
+        auto muted = opt["muted"];
+        if (!muted.empty()) {
+            lin->SetOption("muted", jsonAsBool(muted));
+        }
     }
 }
 

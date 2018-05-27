@@ -269,7 +269,9 @@ int AvMuxer::Start()
                 while (true) {
                         size_t n = 0;
                         inputs_.Foreach([&](std::shared_ptr<Input>& _pInput) {
-                                if (_pInput->GetOption(options::muted)) {
+                                int muted = 1;
+                                _pInput->GetOption(options::muted, muted);
+                                if (muted) {
                                         return;
                                 }
                                 std::shared_ptr<MediaFrame> pFrame;
