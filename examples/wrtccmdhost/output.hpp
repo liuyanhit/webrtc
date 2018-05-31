@@ -246,6 +246,9 @@ namespace muxer
                 // calculate timestamp
                 ssize_t AccTimestamp(IN const size_t& nNow, OUT size_t& nBase, OUT size_t& nSequence);
 
+                void closeRtmp();
+                void closeRtmpReset();
+
         private:
                 // channel
                 const int CHANNEL_CHUNK = 0x2;
@@ -283,6 +286,9 @@ namespace muxer
                 // sequence header
                 std::shared_ptr<H264Nalu> pSps_ = nullptr;
                 std::shared_ptr<H264Nalu> pPps_ = nullptr;
+
+                bool reconnecting = false;
+                uint64_t reconnectLastTs = 0;
         };
 
         class RtmpSink: public SinkObserver {

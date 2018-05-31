@@ -359,4 +359,11 @@ public:
     std::string reqid_;
 };
 
+static inline uint64_t now_ms() {
+        struct timeval  tv;
+        struct timezone tz;
+        gettimeofday(&tv, &tz);
+        return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+
 #endif

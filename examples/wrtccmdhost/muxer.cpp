@@ -306,11 +306,8 @@ void AvMuxer::FeedOutputs(IN std::shared_ptr<MediaFrame>& _pFrame)
 
         // cretical area for the internal clock
         {
-                struct timeval  tv;
-                struct timezone tz;
                 std::lock_guard<std::mutex> lock(clockLck_);
-                gettimeofday(&tv, &tz);
-                nMilliseconds = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+                nMilliseconds = now_ms();
                 if (nInitClock_ == 0) {
                         nInitClock_ = nMilliseconds;
                 }

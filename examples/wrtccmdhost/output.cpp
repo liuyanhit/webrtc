@@ -795,7 +795,14 @@ RtmpSender::RtmpSender(std::shared_ptr<XLogger> xl)
         bytesSent_.store(0);
 }
 
-RtmpSender::~RtmpSender()
+void RtmpSender::closeRtmpReset()
+{
+        closeRtmp();
+        reconnecting = true;
+        reconnectLastTs = now_ms();
+}
+
+void RtmpSender::closeRtmp()
 {
         if (pRtmp_ != nullptr) {
                 RTMP_Close(pRtmp_);
@@ -804,10 +811,24 @@ RtmpSender::~RtmpSender()
         }
 }
 
+RtmpSender::~RtmpSender()
+{
+        closeRtmp();
+}
+
 int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPacket>& _pPacket)
 {
+        if (reconnecting) {
+                auto now = now_ms();
+                if (now < reconnectLastTs+1000) {
+                        return 0;
+                }
+                reconnecting = false;
+        }
+
         if (pRtmp_ == nullptr && pFlvFile_ == nullptr) {
                 if (!strncmp(url.c_str(), "rtmp://", 7)) {
+                        XInfo("rtmp: init");
                         pRtmp_ = RTMP_Alloc();
                         RTMP_Init(pRtmp_);
                 } else {
@@ -830,29 +851,28 @@ int RtmpSender::Send(IN const std::string& url, IN const std::shared_ptr<MediaPa
                 url_ = url;
 
                 XInfo("rtmp: connecting to %s...", url_.c_str());
-                const int sleeptime = 1;
 
                 if (RTMP_SetupURL(pRtmp_, const_cast<char*>(url_.c_str())) == 0) {
                         XError("rtmp: setup URL");
-                        sleep(sleeptime);
-                        return -1;
+                        closeRtmpReset();
+                        return 0;
                 }
                 RTMP_EnableWrite(pRtmp_);
                 if (RTMP_Connect(pRtmp_, nullptr) == 0) {
                         XError("rtmp: connect");
-                        sleep(sleeptime);
-                        return -1;
+                        closeRtmpReset();
+                        return 0;
                 }
                 if (RTMP_ConnectStream(pRtmp_, 0) == 0) {
                         XError("rtmp: connect stream");
-                        sleep(sleeptime);
-                        return -1;
+                        closeRtmpReset();
+                        return 0;
                 }
 
                 if (SendChunkSize(4096) < 0) {
                         XError("rtmp: chunk size not sent");
-                        sleep(sleeptime);
-                        return -1;
+                        closeRtmpReset();
+                        return 0;
                 }
 
                 XInfo("rtmp: connection is established");
@@ -1298,13 +1318,7 @@ int RtmpSender::SendAudioPacket(IN const char _chHeader, IN const char* _pData, 
 
 int RtmpSender::SendPacket(IN unsigned int _nPacketType, IN const char* _pData, IN size_t _nSize, IN size_t _nTimestamp)
 {
-        if (_nPacketType == RTMP_PACKET_TYPE_VIDEO && nVideoSequence_ > 0) {
-                return SendPacketMedium(_nPacketType, _pData, _nSize, _nTimestamp);
-        } else if (_nPacketType == RTMP_PACKET_TYPE_AUDIO && nAudioSequence_ > 0) {
-                return SendPacketMedium(_nPacketType, _pData, _nSize, _nTimestamp);
-        } else {
-                return SendPacketLarge(_nPacketType, _pData, _nSize, _nTimestamp);
-        }
+        return SendPacketLarge(_nPacketType, _pData, _nSize, _nTimestamp);
 }
 
 int RtmpSender::SendPacketLarge(IN unsigned int _nPacketType, IN const char* _pData,
